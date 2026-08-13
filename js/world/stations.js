@@ -4,10 +4,10 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { ConvexGeometry } from "../../vendor/ConvexGeometry.js";
-import { STATIONS } from "./rail.js?v=20260812-view-routing";
+import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
 import {
   FUTURE_FACTORY_PROXIMITY, FUTURE_RIG_CAPTURE_POINTS, FUTURE_RIG_PROXIMITY
-} from "./environment.js?v=20260812-sequential-carry";
+} from "./environment.js?v=20260813-camera-mount-review";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260812-view-routing";
 import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js";
@@ -473,7 +473,7 @@ function shimmerBlock(label) {
 }
 
 /* normalize a GLB clone onto an anchor: longest ground axis → targetLen */
-function mountModel(anchor, srcScene, targetLen = 2.5) {
+function mountModel(anchor, srcScene, targetLen = 2.5, yaw = 0) {
   const obj = srcScene.clone(true);
   obj.traverse((o) => {
     if (o.isMesh && o.material && o.material.emissive) {
@@ -485,9 +485,21 @@ function mountModel(anchor, srcScene, targetLen = 2.5) {
   const size = bb.getSize(new THREE.Vector3());
   const s = targetLen / Math.max(size.x, size.z, 1e-6);
   obj.scale.setScalar(s);
+  /* Apply the authored comparison yaw before the final bounds pass. A cattle
+     crop is asymmetric, so rotating an already-centred AABB can move its final
+     visual centre away from the plinth even though its pivot remains at zero. */
+  obj.rotation.y = yaw;
+  obj.updateMatrixWorld(true);
   bb.setFromObject(obj);
   const c = bb.getCenter(new THREE.Vector3());
   obj.position.set(-c.x, -bb.min.y, -c.z);
+  obj.updateMatrixWorld(true);
+  bb.setFromObject(obj);
+  obj.userData.mountBounds = {
+    minY: bb.min.y,
+    centerX: bb.getCenter(new THREE.Vector3()).x,
+    centerZ: bb.getCenter(new THREE.Vector3()).z
+  };
   anchor.clear();
   anchor.add(obj);
   return obj;
@@ -2573,6 +2585,11 @@ const METHODS = [
 ];
 
 const COMPARE_SPACING = 2.8;
+/* All five sources use canonical (width, height, length) axes. Present them at
+   the same left-facing three-quarter yaw so geometry, rather than an accidental
+   asset-local camera angle, is what changes across the comparison. */
+const COMPARE_MODEL_YAW = -0.9;
+const RGBD_MODEL_YAW = COMPARE_MODEL_YAW + Math.PI;
 const compareX = (i) => (i - (METHODS.length - 1) / 2) * COMPARE_SPACING;
 
 function methodPlaque(m) {
@@ -2660,10 +2677,13 @@ function buildCompare(scene, s, qualityTier = "high") {
   const lowTier = qualityTier === "low";
   METHODS.forEach((m, i) => {
     const x = compareX(i);
-    const p = plinth(2.3, m.hot ? 1.1 : 0.9, 1.7, m.hot);
+    const plinthHeight = m.hot ? 1.1 : 0.9;
+    const p = plinth(2.3, plinthHeight, 1.7, m.hot);
     p.position.x = x;
     const anchor = new THREE.Group();
-    anchor.position.set(x, m.hot ? 1.15 : 0.95, 0);
+    /* The rim is 0.05 u thick and centred at plinthHeight, so its physical top
+       is exactly +0.025 u. Mount every comparison on that surface. */
+    anchor.position.set(x, plinthHeight + 0.025, 0);
     const sh = shimmerBlock(
       m.key === "rgbd" ? "LOADING · 99K POINTS"
         : m.key === "trellis2" ? "LOADING · 16 MB" : null
@@ -2764,12 +2784,15 @@ function buildCompare(scene, s, qualityTier = "high") {
       return {
         mode: lowTier ? "adaptive-surfaces-plus-native-rgbd-points" : "full-models-plus-native-rgbd-points",
         entries: [...mounted].map(([key, entry]) => ({
-          key, kind: entry.kind, points: entry.points
+          key, kind: entry.kind, points: entry.points,
+          mountBounds: entry.obj.userData.mountBounds || null
         }))
       };
     },
     update(t) {
-      for (const k of Object.keys(anchors)) anchors[k].rotation.y = t * 0.25;
+      /* Keep every reconstruction at the same canonical yaw. Continuous
+         turntable motion made shape differences harder to compare and could
+         leave nominally aligned assets reading as unrelated poses. */
       if (!lowTier) return;
       const focus = Math.floor(t / 3.2) % METHODS.length;
       const focusKey = METHODS[focus].key;
@@ -3692,20 +3715,22 @@ export function buildStations(
     if (key === "agreement") {
       ["proposal0", "proposal1", "proposal2"].forEach((pkey, i) => {
         if (!anchors[pkey]) return;
-        const obj = mountModel(anchors[pkey], gltfScene, 1.25);
-        obj.rotation.y = [-0.32, 0.04, 0.28][i];
+        const obj = mountModel(anchors[pkey], gltfScene, 1.25, [-0.32, 0.04, 0.28][i]);
         tintModel(obj, [AMBER, ICE, 0xe8e4da][i], [0.58, 0.44, 0.34][i]);
         shimmers[pkey].visible = false;
         registerModelLod(obj);
       });
-      const agreementModel = mountModel(anchors.agreement, gltfScene, 3.1);
+      const agreementModel = mountModel(anchors.agreement, gltfScene, 3.1, COMPARE_MODEL_YAW);
       registerModelLod(agreementModel);
       exhibits[5].registerMounted?.("agreement", agreementModel);
       shimmers.agreement.visible = false;
       const featuresModel = exhibits[FEATURES_I].attachFinalModel(gltfScene);
       if (featuresModel) registerModelLod(featuresModel);
     } else if (anchors[key]) {
-      const model = mountModel(anchors[key], gltfScene, 3.1);
+      /* AutoAligned Subject 001 stores head↔tail opposite to the reconstruction
+         exports despite sharing the same canonical axes. Flip only this source. */
+      const yaw = key === "rgbd" ? RGBD_MODEL_YAW : COMPARE_MODEL_YAW;
+      const model = mountModel(anchors[key], gltfScene, 3.1, yaw);
       registerModelLod(model);
       exhibits[5].registerMounted?.(key, model);
       shimmers[key].visible = false;

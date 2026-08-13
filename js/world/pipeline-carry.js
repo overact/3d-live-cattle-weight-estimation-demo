@@ -6,8 +6,8 @@
    transition from claiming reconstruction finished before the trace did. */
 
 import * as THREE from "../../vendor/three.module.js";
-import { STATIONS } from "./rail.js?v=20260812-view-routing";
-import { displayViewUrl, sharedTex } from "./stations.js?v=20260813-rgbd-pointcloud";
+import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
+import { displayViewUrl, sharedTex } from "./stations.js?v=20260813-camera-mount-review";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;

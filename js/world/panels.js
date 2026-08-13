@@ -4,7 +4,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260812-view-routing";
+import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 
 /* All numbers are the paper's real results — do not edit casually. */
@@ -47,8 +47,8 @@ export const CONTENT = [
   {
     kicker: "STATION 05 · COMPARE",
     title: "Same protocol, different geometry.",
-    body: "Five geometry sources feed the same downstream stacked-ensemble and 5-fold cross-validation protocol: the dataset RGB+D point cloud, average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. Agreement reaches R² 0.69 using RGB alone, compared with 0.65 for the depth-sensor baseline.",
-    chips: ["RGB+D · 99,082 DATASET POINTS · MAPE 6.77% · R² 0.65", "AVERAGE · MAPE 2.82% · R² 0.44", "ENTROPY · MAPE 2.73% · R² 0.47", "TRELLIS2 · MAPE 2.64% · R² 0.53", "AGREEMENT · MAPE 2.22% · R² 0.69"],
+    body: "Five geometry sources feed the same downstream stacked-ensemble and 5-fold cross-validation protocol: the dataset RGB+D point cloud, average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. The RGB+D cattle crop retains registered colors from Subject 001's full AutoAligned point cloud through an exact coordinate join. Agreement reaches R² 0.69 using RGB alone, compared with 0.65 for the depth-sensor baseline.",
+    chips: ["RGB+D · 99,082 POINTS · MAPE 6.77% · R² 0.65", "AVERAGE · MAPE 2.82% · R² 0.44", "ENTROPY · MAPE 2.73% · R² 0.47", "TRELLIS2 · MAPE 2.64% · R² 0.53", "AGREEMENT · MAPE 2.22% · R² 0.69"],
     figures: [{ src: "assets/figures/results/regression_MAPE.png", alt: "Dataset-level MAPE across weight-estimation models" }]
   },
   {

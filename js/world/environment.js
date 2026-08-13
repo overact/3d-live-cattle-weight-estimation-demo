@@ -5,7 +5,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { clone as cloneSkinned } from "../../vendor/SkeletonUtils.js";
-import { STATIONS } from "./rail.js?v=20260812-view-routing";
+import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
 import { instanceTemplate } from "../lib/three-perf.js";
 import { createBlobShadow } from "../lib/blob-shadow.js";
 import { createColliderSet } from "../lib/obb-collider.js";
@@ -818,8 +818,8 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
   scene.add(instanceTemplate(pineG.scene, pinePlacements, groundHeight));
 
   /* hay bales */
-  /* (-2,-24) would sit inside the new FEATURES pad — moved to (9,-35) */
-  [[-20, 40], [-2, 14], [20, 20], [26, -14], [9, -35], [-32, -12]].forEach(([x, z], i) => {
+  /* Keep the south bale clear of the widened 06→07 guide ribbon. */
+  [[-20, 40], [-2, 14], [20, 20], [26, -14], [15, -66], [-32, -12]].forEach(([x, z], i) => {
     const h = 1.1 + hash2(i, 113) * 0.3;
     const hay = fitHeight(hayG.scene.clone(true), h);
     settle(hay, x, z, hash2(i, 127) * Math.PI);
@@ -1027,7 +1027,14 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
       if (within && e.station !== i) exits.push(e.mouth);        // walk out first
       else if (!within && e.station === i) entries.push(e.mouth); // then walk in
     }
-    return [...exits, ...entries];   // the calf can only stand in one of them
+    /* The path-side accent between 04 and 05 deliberately follows the glowing
+       curve, but a calf aims at station centres in a straight line. Route round
+       its south-east end in either direction instead of wedging on the rail. */
+    const skirtsCompareFence =
+      (i === 5 && fromX > 20 && fromZ > -10)
+      || (i === 4 && fromX < 20 && fromZ < -10);
+    const openPasture = skirtsCompareFence ? [{ x: 28, z: -10 }] : [];
+    return [...exits, ...openPasture, ...entries];
   }
 
   return {

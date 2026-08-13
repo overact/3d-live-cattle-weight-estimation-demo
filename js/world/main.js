@@ -6,16 +6,16 @@ import * as THREE from "../../vendor/three.module.js";
 import { OrbitControls } from "../../vendor/OrbitControls.js";
 import { GLTFLoader } from "../../vendor/GLTFLoader.js";
 import { CSS2DRenderer } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260812-view-routing";
-import { buildEnvironment } from "./environment.js?v=20260812-sequential-carry";
-import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260813-rgbd-pointcloud";
+import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260813-camera-mount-review";
+import { buildEnvironment } from "./environment.js?v=20260813-camera-mount-review";
+import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260813-camera-mount-review";
 import { needsFullSourceTextures } from "./source-texture-policy.js";
-import { initPanels, makeStationMarkers } from "./panels.js?v=20260813-rgbd-pointcloud";
+import { initPanels, makeStationMarkers } from "./panels.js?v=20260813-camera-mount-review";
 import { initTravelCaption } from "./travel-caption.js?v=20260813-rgbd-pointcloud";
 import { initStepScrubber } from "./step-scrubber.js?v=20260812-view-routing";
 import { initReaderGuide } from "./reader-guide.js?v=20260812-gantry-trigger";
-import { initRoam } from "./roam.js?v=20260812-pipeline-review";
-import { createPipelineCarry } from "./pipeline-carry.js?v=20260813-rgbd-pointcloud";
+import { initRoam } from "./roam.js?v=20260813-camera-mount-review";
+import { createPipelineCarry } from "./pipeline-carry.js?v=20260813-camera-mount-review";
 /* Version the changed world graph together. An old cached pre-bind-pose avatar
    adapter scales a cloned SkinnedMesh to ~1/900 and leaves only its shadow. */
 import { createGlbCattle } from "../lib/glb-cattle.js?v=20260811-fast-dense";
@@ -1112,7 +1112,9 @@ async function main() {
       let lastError = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const response = await fetch(`assets/cases/case_001/models/${key}.glb`);
+          const response = await fetch(
+            `assets/cases/case_001/models/${key}.glb?v=20260813-camera-mount-review`
+          );
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const buf = await response.arrayBuffer();
           const gltf = await new Promise((res, rej) =>
@@ -1122,12 +1124,14 @@ async function main() {
              near-black — replace it. trellis2 carries its own textured
              material (no COLOR_0), leave that one untouched. */
           gltf.scene.traverse((o) => {
-            /* CowDB's RGB+D baseline is geometry-only XYZ. Keep it visibly a
-               point cloud and use one display colour rather than fabricating
-               per-point RGB evidence that is absent from the source PLY. */
-            if (o.isPoints) {
+            /* The 99,082-point cattle crop is joined by exact rounded XYZ to
+               Subject 001's full AutoAligned RGB cloud. Preserve those
+               registered source colors in the point material. */
+            if (key === "rgbd" && o.isPoints) {
+              const hasDisplayColors = !!o.geometry?.getAttribute("color");
               o.material = new THREE.PointsMaterial({
-                color: 0x86d7ea,
+                color: hasDisplayColors ? 0xffffff : 0x86d7ea,
+                vertexColors: hasDisplayColors,
                 size: QUALITY.tier === "low" ? 0.032 : 0.024,
                 sizeAttenuation: true,
                 transparent: true,
@@ -1135,6 +1139,9 @@ async function main() {
                 depthWrite: false
               });
               o.userData.evidenceKind = "rgbd-point-cloud";
+              o.userData.colorEncoding = hasDisplayColors
+                ? "registered-source-rgb"
+                : "single-display-color-fallback";
               return;
             }
             if (!o.isMesh) return;

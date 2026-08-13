@@ -9,7 +9,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260812-view-routing";
+import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
 import { createChibiCattle } from "../lib/chibi-cattle.js";
 import { createThirdPersonRig, turnToward } from "../lib/third-person-rig.js?v=20260812-steering";
 

@@ -18,14 +18,22 @@ export const STATIONS = [
   { id: "reconstruct", num: "03", name: "SINGLE-VIEW RECON", pos: V( 12, 0,  26), look: V( 12, 1.7,  26), cam: V(  6.0, 3.6, 32.5), dwell: 7  },
   { id: "fusion",      num: "04", name: "MULTI-VIEW RECON",  pos: V( 30, 0,   4), look: V( 30, 2.4,   4), cam: V( 22.0, 4.5, 10.5), dwell: 11 },
   { id: "compare",     num: "05", name: "COMPARE",     pos: V( 14, 0, -18), look: V( 14, 1.4, -18), cam: V( 14.0, 4.0, -7.0), dwell: 9  },
-  { id: "features",    num: "06", name: "FEATURES",    pos: V(  1, 0, -26), look: V(  1, 2.2, -26), cam: V(  7.0, 4.0,-17.0), dwell: 11 },
-  { id: "weigh",       num: "07", name: "WEIGH",       pos: V(-12, 0, -28), look: V(-12, 2.6, -28), cam: V( -2.5, 3.9,-17.5), dwell: 11 },
+  /* The southern method loop stays spacious without forcing 07→08 into a
+     long backtracking hook: 05→06 bends south-west, then 06→07 turns north-
+     west and naturally feeds the future line. */
+  { id: "features",    num: "06", name: "FEATURES",    pos: V( -4, 0, -38), look: V( -4, 2.2, -38), cam: V(  2.0, 4.0,-29.0), dwell: 11 },
+  /* The dwell looks north-west through the result: the barn at (-24,-40) sits
+     clearly behind the Step-07 exhibit instead of beside the southern loop. */
+  { id: "weigh",       num: "07", name: "WEIGH",       pos: V(-18, 0, -22), look: V(-18, 2.6, -22), cam: V(-13.5, 4.2, -8.5), dwell: 11 },
   /* The walk target stays east of the paddock. The northbound deployment line
      sits beyond the north fence; look/cam frame it from its clear east side. */
   { id: "future",      num: "08", name: "FUTURE",      pos: V(-28, 0, 14), look: V(-40, 2.1, 14), cam: V(-27.5, 5.0, 14), dwell: 10 }
 ];
 
-export const OVERVIEW = { pos: V(6, 42, 60), target: V(0, 0, 2) };
+/* Keep the ranch readable behind the opening guide and give free-explore a
+   clearer plan view. The horizontal framing is unchanged; only the default
+   eye height is raised. */
+export const OVERVIEW = { pos: V(6, 50, 60), target: V(0, 0, 2) };
 
 /* Curve through dwell cameras with lifted flyover waypoints between. */
 const railPts = [];
