@@ -7,7 +7,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { STATIONS } from "./rail.js?v=20260812-view-routing";
-import { displayViewUrl, sharedTex } from "./stations.js?v=20260813-feedback";
+import { displayViewUrl, sharedTex } from "./stations.js?v=20260813-rgbd-pointcloud";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;

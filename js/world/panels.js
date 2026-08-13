@@ -5,7 +5,7 @@
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
 import { STATIONS } from "./rail.js?v=20260812-view-routing";
-import { IO, pad2 } from "./handoff-content.js?v=20260813-partial-photo";
+import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 
 /* All numbers are the paper's real results — do not edit casually. */
 export const CONTENT = [
@@ -47,8 +47,8 @@ export const CONTENT = [
   {
     kicker: "STATION 05 · COMPARE",
     title: "Same protocol, different geometry.",
-    body: "Four reconstruction sources are trained and evaluated with the same downstream stacked-ensemble and 5-fold cross-validation protocol: average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. Agreement is the only RGB-only source to beat the depth-sensor baseline (R² 0.65).",
-    chips: ["AVERAGE · MAPE 2.82% · R² 0.44", "ENTROPY · MAPE 2.73% · R² 0.47", "TRELLIS2 · MAPE 2.64% · R² 0.53", "AGREEMENT · MAPE 2.22% · R² 0.69"],
+    body: "Five geometry sources feed the same downstream stacked-ensemble and 5-fold cross-validation protocol: the dataset RGB+D point cloud, average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. Agreement reaches R² 0.69 using RGB alone, compared with 0.65 for the depth-sensor baseline.",
+    chips: ["RGB+D · 99,082 DATASET POINTS · MAPE 6.77% · R² 0.65", "AVERAGE · MAPE 2.82% · R² 0.44", "ENTROPY · MAPE 2.73% · R² 0.47", "TRELLIS2 · MAPE 2.64% · R² 0.53", "AGREEMENT · MAPE 2.22% · R² 0.69"],
     figures: [{ src: "assets/figures/results/regression_MAPE.png", alt: "Dataset-level MAPE across weight-estimation models" }]
   },
   {

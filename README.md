@@ -24,7 +24,7 @@ The interactive case views and reconstruction traces are recorded research artif
 
 Reconstruction comparisons should be interpreted through the paper's visual evidence and downstream weight-estimation protocol. The demo does not claim direct geometric accuracy without corresponding ground-truth geometry metrics.
 
-Case 001 source views originate from [CowDB](https://github.com/ruchaya/CowDB), the public cattle image database described by Ruchay et al., “Accurate body measurement of live cattle using three depth cameras and non-rigid 3-D shape recovery,” *Computers and Electronics in Agriculture* 179 (2020), 105821, [doi:10.1016/j.compag.2020.105821](https://doi.org/10.1016/j.compag.2020.105821). Research artifacts and source data remain subject to their original rights; project maintainers should confirm redistribution terms before mirroring them elsewhere.
+Case 001 source views and the Station 05 RGB+D baseline originate from [CowDB](https://github.com/ruchaya/CowDB), the public cattle database described by Ruchay et al., “Accurate body measurement of live cattle using three depth cameras and non-rigid 3-D shape recovery,” *Computers and Electronics in Agriculture* 179 (2020), 105821, [doi:10.1016/j.compag.2020.105821](https://doi.org/10.1016/j.compag.2020.105821). The RGB+D exhibit preserves all 99,082 Subject 001 XYZ samples in a compact float32 glTF POINTS primitive. The source PLY contains no RGB fields, so the ranch uses a single unlit display colour and does not invent per-point measurements. Research artifacts and source data remain subject to their original rights; project maintainers should confirm redistribution terms before mirroring them elsewhere.
 
 ## Acknowledgements
 

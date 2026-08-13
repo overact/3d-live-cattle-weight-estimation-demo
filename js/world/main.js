@@ -8,14 +8,14 @@ import { GLTFLoader } from "../../vendor/GLTFLoader.js";
 import { CSS2DRenderer } from "../../vendor/CSS2DRenderer.js";
 import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260812-view-routing";
 import { buildEnvironment } from "./environment.js?v=20260812-sequential-carry";
-import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260813-feedback";
+import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260813-rgbd-pointcloud";
 import { needsFullSourceTextures } from "./source-texture-policy.js";
-import { initPanels, makeStationMarkers } from "./panels.js?v=20260813-partial-photo";
-import { initTravelCaption } from "./travel-caption.js?v=20260813-partial-photo";
+import { initPanels, makeStationMarkers } from "./panels.js?v=20260813-rgbd-pointcloud";
+import { initTravelCaption } from "./travel-caption.js?v=20260813-rgbd-pointcloud";
 import { initStepScrubber } from "./step-scrubber.js?v=20260812-view-routing";
 import { initReaderGuide } from "./reader-guide.js?v=20260812-gantry-trigger";
 import { initRoam } from "./roam.js?v=20260812-pipeline-review";
-import { createPipelineCarry } from "./pipeline-carry.js?v=20260813-partial-photo";
+import { createPipelineCarry } from "./pipeline-carry.js?v=20260813-rgbd-pointcloud";
 /* Version the changed world graph together. An old cached pre-bind-pose avatar
    adapter scales a cloned SkinnedMesh to ~1/900 and leaves only its shadow. */
 import { createGlbCattle } from "../lib/glb-cattle.js?v=20260811-fast-dense";
@@ -1122,6 +1122,21 @@ async function main() {
              near-black — replace it. trellis2 carries its own textured
              material (no COLOR_0), leave that one untouched. */
           gltf.scene.traverse((o) => {
+            /* CowDB's RGB+D baseline is geometry-only XYZ. Keep it visibly a
+               point cloud and use one display colour rather than fabricating
+               per-point RGB evidence that is absent from the source PLY. */
+            if (o.isPoints) {
+              o.material = new THREE.PointsMaterial({
+                color: 0x86d7ea,
+                size: QUALITY.tier === "low" ? 0.032 : 0.024,
+                sizeAttenuation: true,
+                transparent: true,
+                opacity: 0.92,
+                depthWrite: false
+              });
+              o.userData.evidenceKind = "rgbd-point-cloud";
+              return;
+            }
             if (!o.isMesh) return;
             const colAttr = o.geometry && o.geometry.getAttribute("color");
             if (!colAttr) return;
@@ -1226,7 +1241,7 @@ async function main() {
       if (!compareSequence) {
         /* Fetch/parse one GLB at a time and yield a paint between attachments. */
         compareSequence = (async () => {
-          for (const key of ["agreement", "entropy", "average", "trellis2"]) {
+          for (const key of ["agreement", "rgbd", "entropy", "average", "trellis2"]) {
             await requestModel(key);
             await pauseForPaint();
           }

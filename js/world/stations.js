@@ -8,7 +8,7 @@ import { STATIONS } from "./rail.js?v=20260812-view-routing";
 import {
   FUTURE_FACTORY_PROXIMITY, FUTURE_RIG_CAPTURE_POINTS, FUTURE_RIG_PROXIMITY
 } from "./environment.js?v=20260812-sequential-carry";
-import { IO, pad2 } from "./handoff-content.js?v=20260813-feedback";
+import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260812-view-routing";
 import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js";
 import { createDeferredReconPlayer } from "../lib/recon-player.js?v=20260812-virtual-clock";
@@ -2565,11 +2565,15 @@ function buildFeatures(scene, s, payload) {
 }
 
 const METHODS = [
+  { key: "rgbd",      label: "RGB+D",      mape: "6.77%", r2: "0.65", hot: false },
   { key: "average",   label: "AVERAGE",   mape: "2.82%", r2: "0.44", hot: false },
   { key: "entropy",   label: "ENTROPY",   mape: "2.73%", r2: "0.47", hot: false },
   { key: "trellis2",  label: "TRELLIS2",  mape: "2.64%", r2: "0.53", hot: false },
   { key: "agreement", label: "AGREEMENT", mape: "2.22%", r2: "0.69", hot: true }
 ];
+
+const COMPARE_SPACING = 2.8;
+const compareX = (i) => (i - (METHODS.length - 1) / 2) * COMPARE_SPACING;
 
 function methodPlaque(m) {
   return canvasPlane(2.4, 0.72, 512, 154, (ctx, W, H) => {
@@ -2588,11 +2592,10 @@ function methodPlaque(m) {
   });
 }
 
-/* Low-tier Step-05 stand-in: preserve the source GLB untouched, but represent
-   one unfocused method with a deterministic sample of its real surface
-   vertices. Three models stay full-resolution, including the focused method;
-   rotating only one proxy trims roughly 20–25% on average instead of turning
-   the comparison into an aggressively simplified point-cloud display. */
+/* Low-tier Step-05 stand-in: preserve each source GLB untouched, but represent
+   one unfocused surface method with a deterministic sample of its real
+   vertices. The native RGB+D POINTS primitive is already the measured dataset
+   geometry, so it is never replaced by a proxy or presented as a mesh. */
 function pointProxyForModel(obj, color, budget = 18000) {
   obj.updateMatrixWorld(true);
   const meshes = [];
@@ -2656,12 +2659,15 @@ function buildCompare(scene, s, qualityTier = "high") {
   let processRunId = null;
   const lowTier = qualityTier === "low";
   METHODS.forEach((m, i) => {
-    const x = (i - 1.5) * 3.3;
+    const x = compareX(i);
     const p = plinth(2.3, m.hot ? 1.1 : 0.9, 1.7, m.hot);
     p.position.x = x;
     const anchor = new THREE.Group();
     anchor.position.set(x, m.hot ? 1.15 : 0.95, 0);
-    const sh = shimmerBlock(m.key === "trellis2" ? "LOADING · 16 MB" : null);
+    const sh = shimmerBlock(
+      m.key === "rgbd" ? "LOADING · 99K POINTS"
+        : m.key === "trellis2" ? "LOADING · 16 MB" : null
+    );
     sh.position.copy(anchor.position);
     const plq = methodPlaque(m);
     plq.position.set(x, m.hot ? 3.4 : 3.1, 0.2);
@@ -2677,14 +2683,17 @@ function buildCompare(scene, s, qualityTier = "high") {
     })
   );
   focusRing.rotation.x = Math.PI / 2;
-  focusRing.position.set((0 - 1.5) * 3.3, 0.08, 0);
+  focusRing.position.set(compareX(0), 0.08, 0);
   focusRing.visible = lowTier;
   g.add(focusRing);
   scene.add(g);
   stationSpot(scene, s, 64);
   /* hotter pool over the agreement plinth */
+  const agreementX = anchors.agreement.position.x;
   stationSpot(scene, s, 100, new THREE.Vector3(
-    Math.sin(g.rotation.y + Math.PI / 2) * 4.95, 0, Math.cos(g.rotation.y + Math.PI / 2) * 4.95));
+    Math.sin(g.rotation.y + Math.PI / 2) * agreementX,
+    0,
+    Math.cos(g.rotation.y + Math.PI / 2) * agreementX));
   function ghostModel(entry, on) {
     if (!entry) return;
     entry.obj.traverse((o) => {
@@ -2726,9 +2735,15 @@ function buildCompare(scene, s, qualityTier = "high") {
     registerMounted(key, obj) {
       if (!obj) return;
       const method = METHODS.find((m) => m.key === key);
-      const sampled = lowTier
-        ? pointProxyForModel(obj, method?.hot ? AMBER : ICE)
-        : { proxy: null, meshes: [], points: 0 };
+      let nativePoints = 0;
+      obj.traverse((o) => {
+        if (o.isPoints) nativePoints += o.geometry?.getAttribute("position")?.count || 0;
+      });
+      const sampled = nativePoints > 0
+        ? { proxy: null, meshes: [], points: nativePoints, kind: "point-cloud" }
+        : lowTier
+          ? { ...pointProxyForModel(obj, method?.hot ? AMBER : ICE), kind: "surface-model" }
+          : { proxy: null, meshes: [], points: 0, kind: "surface-model" };
       mounted.set(key, { obj, ...sampled });
       if (key === "agreement") {
         agreementLoadState = "ready";
@@ -2747,8 +2762,10 @@ function buildCompare(scene, s, qualityTier = "high") {
     },
     get lodState() {
       return {
-        mode: lowTier ? "rotating-three-full-plus-one-point-proxy" : "full-models",
-        entries: [...mounted].map(([key, entry]) => ({ key, points: entry.points }))
+        mode: lowTier ? "adaptive-surfaces-plus-native-rgbd-points" : "full-models-plus-native-rgbd-points",
+        entries: [...mounted].map(([key, entry]) => ({
+          key, kind: entry.kind, points: entry.points
+        }))
       };
     },
     update(t) {
@@ -2759,7 +2776,11 @@ function buildCompare(scene, s, qualityTier = "high") {
       /* Put the method opposite the amber focus into point mode. This keeps
          the selected object and two neighbours as complete meshes while each
          source takes a turn shedding its raster cost. */
-      const proxyKey = METHODS[(focus + 2) % METHODS.length].key;
+      let proxyKey = null;
+      for (let offset = 2; offset < METHODS.length + 2; offset++) {
+        const candidate = METHODS[(focus + offset) % METHODS.length].key;
+        if (mounted.get(candidate)?.proxy) { proxyKey = candidate; break; }
+      }
       for (const [key, entry] of mounted) {
         if (!entry.proxy) continue;
         if (key === "agreement" && agreementGhosted) {

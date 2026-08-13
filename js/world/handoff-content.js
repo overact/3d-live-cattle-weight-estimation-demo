@@ -32,7 +32,7 @@ export const IO = [
   { in: { from: 1, label: "RGB triptych" },            out: { to: 3, label: "masked cattle RGB views" } },
   { in: { from: 2, label: "left masked view · right + top held" }, out: { to: 4, label: "reunited masked RGB triptych" } },
   { in: { from: 3, label: "three masked RGB views" },  out: { to: 5, label: "multi-view 3D result" } },
-  { in: { from: 4, label: "multi-view result + three rivals" }, out: { to: 6, label: "chosen agreement model" } },
+  { in: { from: 4, label: "multi-view result + four baselines" }, out: { to: 6, label: "chosen agreement model" } },
   { in: { from: 5, label: "winning cloud" },           out: { to: 7, label: "feature vector" } },
   { in: { from: 6, label: "features" },                out: { to: 8, label: "evaluated regression result" } },
   { in: { from: 7, label: "evaluated regression result" }, out: { to: null, label: "simulated future workflow" } }
