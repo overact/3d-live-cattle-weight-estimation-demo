@@ -1,5 +1,9 @@
 # 3D Live Cattle Weight Estimation — Show Demo
 
+**Live Pages:** [Open Agreement Ranch](https://overact.github.io/3d-live-cattle-weight-estimation-demo/)
+
+Quick access: [Ranch](https://overact.github.io/3d-live-cattle-weight-estimation-demo/) · [Agreement 3D](https://overact.github.io/3d-live-cattle-weight-estimation-demo/agreement.html) · [Paper](https://overact.github.io/3d-live-cattle-weight-estimation-demo/paper.html)
+
 **Agreement Ranch** is an interactive Three.js companion to *Agreement-Driven Multi-View 3D Reconstruction for Live Cattle Weight Estimation*. It turns the paper's RGB-to-3D-to-weight pipeline into a spatial walkthrough: follow matched left, right, and top views through segmentation, single-view reconstruction, agreement-driven multi-view fusion, geometric feature extraction, and downstream live-weight evaluation.
 
 ## Explore

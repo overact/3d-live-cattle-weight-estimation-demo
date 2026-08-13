@@ -97,10 +97,10 @@ function showEntryToast(destination) {
   entryToastTitle.textContent = free ? "FREE EXPLORE READY" : "GUIDED TRAIL READY";
   entryToastBody.textContent = free
     ? "Drag to orbit, right-drag to pan, and scroll to zoom. Select any exhibit to inspect it; press C to roam as the calf."
-    : "Follow the amber path behind the calf. Choose a numbered station to walk there, drag to look, and press Esc to return to the map.";
+    : "You are driving the calf. Follow the amber path with WASD, or choose a numbered station to auto-run there. Drag to look; press C or Esc to leave calf mode.";
   entryToastKeys.textContent = free
     ? "DRAG → ORBIT · RIGHT-DRAG → PAN · SCROLL → ZOOM · C → CALF"
-    : "STATION → WALK · DRAG → LOOK · ESC → MAP";
+    : "WASD → MOVE · SHIFT → RUN · DRAG → LOOK · 0–8 → AUTO-RUN";
   clearTimeout(entryToastShowTimer);
   clearTimeout(entryToastHideTimer);
   entryToastShowTimer = setTimeout(() => {
@@ -392,6 +392,7 @@ async function main() {
   let worldTime = 0;
   let mode = TOUR ? "tour-wait" : "intro";  // intro | travel | dwell | overview | roam | tour
   let worldEntered = false;
+  let pendingEntryToast = null;
   let active = -1;                          // station highlighted in UI
   let travel = null;                        // {kind, from, a, b, final, start, dur}
   let lastStation = 0;
@@ -403,6 +404,12 @@ async function main() {
   let approachStation = -1;
   let arrivalStation = -1;
   let arrivalStart = -Infinity;
+
+  function revealEntryToast(destination) {
+    if (pendingEntryToast !== destination) return;
+    pendingEntryToast = null;
+    showEntryToast(destination);
+  }
 
   const poseNow = () => ({
     pos: camera.position.clone(),
@@ -576,6 +583,7 @@ async function main() {
        here and re-entering the state machine from its own body invites the bug
        where the panel opens for a mode that no longer exists. */
     if (autoRoam === "waiting") autoRoam = "armed";
+    else revealEntryToast("guided");
   }
 
   function startTravel(kind, b, dur, opts = {}) {
@@ -637,6 +645,7 @@ async function main() {
     const chip = document.getElementById("stationChip");
     chip.textContent = "OVERVIEW — AGREEMENT RANCH";
     chip.classList.add("show");
+    revealEntryToast("overview");
   }
 
   function stationTravelSeconds(legs) {
@@ -717,6 +726,7 @@ async function main() {
     stepScrubber.detach();
     pipelineCarry.setEnabled(true);
     roam.enter(lastStation, worldTime);   // spawn beside the last dwelled station
+    revealEntryToast("guided");
   }
   function exitRoam(kind) {
     if (mode !== "roam") return;
@@ -1072,10 +1082,10 @@ async function main() {
       return;
     }
     worldEntered = true;
+    pendingEntryToast = destination;
     document.activeElement?.blur?.(); // keep movement keys flowing to the world
     introEl.classList.add("hidden");
     renderLifecycle.start();
-    showEntryToast(destination);
     if (destination === "overview") {
       /* EXPLORE FREELY means the paper map, not an involuntary mode switch.
          The primary CALF-GUIDED route keeps the automatic entrance. */
