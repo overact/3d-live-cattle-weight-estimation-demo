@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Interactive 3D viewer for cross-view agreement over diffusion steps in live-cattle reconstruction.">
+    <title>Agreement 3D | Cross-View Fusion Explorer</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="assets/fonts/fonts.css">
+    <link rel="stylesheet" href="css/agreement.css">
+    <link rel="stylesheet" href="css/global-nav.css">
+  </head>
+  <body>
+    <nav class="global-nav global-nav--overlay" aria-label="Site pages">
+      <span class="global-nav__brand">LIVE CATTLE·3D</span>
+      <a class="global-nav__link global-nav__link--current" href="agreement.html" aria-current="page">Agreement 3D</a>
+      <a class="global-nav__link" href="index.html">Ranch</a>
+      <a class="global-nav__link" href="paper.html">Paper</a>
+    </nav>
+    <div class="viewer-shell">
+      <header class="viewer-header">
+        <a class="brand hud-mono" href="index.html">MV-SAM3D</a>
+        <span class="viewer-title hud-mono">AGREEMENT POINT CLOUD · SUBJECT 001 · STAGE 1 LATENTS</span>
+        <nav class="viewer-nav hud-mono">
+          <a href="index.html">RANCH</a>
+          <a href="paper.html">PAPER</a>
+        </nav>
+      </header>
+
+      <main class="viewer-main">
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="gl"></canvas>
+          <div class="hud-corner tl" aria-hidden="true"></div>
+          <div class="hud-corner br" aria-hidden="true"></div>
+          <div class="readout hud-mono" aria-live="polite">
+            <span>STEP <b id="roStep">00</b>/50</span>
+            <span>MEAN AGREEMENT <b id="roMean">0.00</b></span>
+            <span>VISIBLE <b id="roVis">100%</b> OF 5941</span>
+          </div>
+          <p class="hint hud-mono">DRAG TO ORBIT · WHEEL TO ZOOM · SPACE TO PLAY</p>
+        </div>
+
+        <aside class="panel">
+          <section class="panel-block">
+            <h1>Where the views agree.</h1>
+            <p class="panel-lede">
+              Each latent is colored by its cross-view agreement,
+              Σ<sub>v</sub> w<sub>v</sub>·e<sup>−α·d<sub>v</sub></sup>.
+              Scrub the diffusion steps and watch consensus spread through the body.
+            </p>
+          </section>
+
+          <section class="panel-block">
+            <div class="row-label hud-mono"><span>DIFFUSION STEP</span><b id="stepLabel">00</b></div>
+            <div class="step-row">
+              <button id="btnPlay" class="ctl-btn" type="button" aria-label="Play or pause step animation">▶</button>
+              <input id="stepSlider" type="range" min="0" max="50" step="1" value="0" aria-label="Diffusion step">
+            </div>
+            <svg id="spark" viewBox="0 0 260 56" preserveAspectRatio="none" aria-label="Mean agreement per step">
+              <polyline id="sparkLine" fill="none"></polyline>
+              <line id="sparkHead" y1="0" y2="56"></line>
+            </svg>
+            <div class="spark-x hud-mono"><span>STEP 0</span><span>MEAN AGREEMENT ↑</span><span>50</span></div>
+          </section>
+
+          <section class="panel-block">
+            <div class="row-label hud-mono"><span>COLOR MAP</span></div>
+            <div class="seg-row" role="tablist" aria-label="Colormap">
+              <button class="seg-btn hud-mono active" id="cmapPaper" type="button" role="tab" aria-selected="true">COOLWARM · PAPER</button>
+              <button class="seg-btn hud-mono" id="cmapBarn" type="button" role="tab" aria-selected="false">NIGHT BARN</button>
+            </div>
+            <div class="legend">
+              <span class="legend-bar" id="legendBar"></span>
+              <div class="legend-labels hud-mono"><span>0.30 · LOW AGREEMENT</span><span>HIGH · 1.00</span></div>
+            </div>
+          </section>
+
+          <section class="panel-block">
+            <div class="row-label hud-mono"><span>MIN AGREEMENT FILTER</span><b id="thrLabel">0.00</b></div>
+            <input id="thrSlider" type="range" min="0" max="0.98" step="0.01" value="0" aria-label="Hide points below this agreement">
+            <div class="row-label hud-mono" style="margin-top:1rem"><span>POINT SIZE</span><b id="sizeLabel">1.0</b></div>
+            <input id="sizeSlider" type="range" min="0.4" max="2.4" step="0.1" value="1" aria-label="Point size">
+            <div class="seg-row" style="margin-top:1rem">
+              <button class="seg-btn hud-mono active" id="btnSpin" type="button" aria-pressed="true">AUTO-ROTATE</button>
+            </div>
+          </section>
+
+          <section class="panel-block panel-note">
+            <p class="hud-mono">SOURCE · 51 STAGE-1 LATENT SNAPSHOTS (5941 VOXELS, 64³ GRID) FROM THE AGREEMENT LOGGER · SCALAR RECOVERED FROM THE BAKED COOLWARM COLORS</p>
+          </section>
+        </aside>
+      </main>
+    </div>
+
+    <script type="module" src="js/agreement.js"></script>
+  </body>
+</html>

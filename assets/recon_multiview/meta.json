@@ -1,0 +1,159 @@
+{
+  "schemaVersion": 3,
+  "coordinateSpace": "web-normalized-from-sam3d-canonical",
+  "steps": 25,
+  "counts": [
+    0,
+    3,
+    37,
+    143,
+    487,
+    1171,
+    2793,
+    3935,
+    4649,
+    5463,
+    6242,
+    6271,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168
+  ],
+  "raw_counts": [
+    0,
+    3,
+    37,
+    143,
+    487,
+    1171,
+    2793,
+    3935,
+    4649,
+    5463,
+    6242,
+    6271,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168,
+    50168
+  ],
+  "stages": [
+    12,
+    13
+  ],
+  "stage2GaussiansPerVoxel": 8,
+  "stageStepIds": [
+    [
+      0,
+      21,
+      24,
+      27,
+      30,
+      33,
+      36,
+      39,
+      42,
+      45,
+      48,
+      49
+    ],
+    [
+      0,
+      2,
+      4,
+      6,
+      8,
+      10,
+      12,
+      14,
+      16,
+      18,
+      20,
+      22,
+      24
+    ]
+  ],
+  "trimmedLeadingEmptyFrames": 6,
+  "trace": {
+    "mode": "multi-view",
+    "view_count": 3,
+    "fusion_mode": "agreementweighted",
+    "fusion_semantics": "Stage 1 agreement fusion; Stage 2 multi-view structured-latent refinement",
+    "seed": 42,
+    "stage1_steps": 50,
+    "stage2_steps": 25,
+    "coordinate_space": "sam3d-canonical",
+    "stage2_gaussians_per_voxel": 8,
+    "stage2_points": "top-8 Gaussians by opacity per latent voxel",
+    "stage2_color": "degree-0 SH RGB plus each Gaussian's own opacity"
+  },
+  "normalization": {
+    "center": [
+      -0.003575444221496582,
+      0.0018448084592819214,
+      0.0005929470062255859
+    ],
+    "half_extent": 0.4992789626121521,
+    "reference": "final-center-global-extent"
+  },
+  "note": "true per-step SAM-3D geometry (stage-1 voxels + optional stage-2 point representation); normalized by the final step",
+  "stage2Rgba": {
+    "file": "stage2.rgba.bin",
+    "format": "uint8",
+    "itemSize": 4,
+    "normalized": true,
+    "counts": [
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168,
+      50168
+    ]
+  },
+  "source": {
+    "images": [
+      "assets/cases/case_001/views/rgb_left.png",
+      "assets/cases/case_001/views/rgb_right.png",
+      "assets/cases/case_001/views/rgb_top.png"
+    ],
+    "masks": [
+      "assets/cases/case_001/views/mask_left.png",
+      "assets/cases/case_001/views/mask_right.png",
+      "assets/cases/case_001/views/mask_top_aligned.png"
+    ]
+  },
+  "positionEncoding": {
+    "file": "steps.bin",
+    "format": "int16",
+    "itemSize": 3,
+    "normalized": true,
+    "scale": 0.00003051850947599719
+  }
+}

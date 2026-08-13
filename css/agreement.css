@@ -1,0 +1,256 @@
+/* MV-SAM3D agreement point-cloud viewer — same visual system as film.css */
+
+:root {
+  --black: #07090c;
+  --ink: #0d1218;
+  --panel: #151c24;
+  --bone: #ede7da;
+  --muted: #8b95a0;
+  --amber: #e39b2d;
+  --ice: #86d7ea;
+  --wire: rgba(237, 231, 218, 0.16);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--black);
+  color: var(--bone);
+  font-family: "Archivo", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.hud-mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.12em;
+}
+
+.viewer-shell { height: 100vh; display: flex; flex-direction: column; }
+
+/* header */
+.viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 1.4rem;
+  padding: 0.8rem 1.4rem;
+  border-bottom: 1px solid rgba(237, 231, 218, 0.08);
+}
+
+.brand {
+  color: var(--amber);
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.viewer-title { font-size: 0.7rem; color: var(--muted); flex: 1; }
+
+.viewer-nav { display: flex; gap: 1rem; }
+
+.viewer-nav a {
+  color: var(--bone);
+  text-decoration: none;
+  font-size: 0.7rem;
+  border: 1px solid var(--wire);
+  padding: 0.4rem 0.7rem;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.viewer-nav a:hover { border-color: var(--ice); color: var(--ice); }
+
+/* layout */
+.viewer-main { flex: 1; display: flex; min-height: 0; }
+
+.canvas-wrap { position: relative; flex: 1; min-width: 0; }
+
+#gl { width: 100%; height: 100%; display: block; }
+
+.hud-corner {
+  position: absolute;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid rgba(237, 231, 218, 0.3);
+  pointer-events: none;
+}
+
+.hud-corner.tl { top: 1.2rem; left: 1.2rem; border-right: 0; border-bottom: 0; }
+.hud-corner.br { bottom: 1.2rem; right: 1.2rem; border-left: 0; border-top: 0; }
+
+.readout {
+  position: absolute;
+  top: 1.4rem;
+  left: 2.6rem;
+  display: flex;
+  gap: 1.6rem;
+  font-size: 0.68rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.readout b { color: var(--ice); font-weight: 600; }
+
+.hint {
+  position: absolute;
+  bottom: 1.4rem;
+  left: 2.6rem;
+  font-size: 0.6rem;
+  color: rgba(139, 149, 160, 0.7);
+  pointer-events: none;
+}
+
+/* side panel */
+.panel {
+  width: min(340px, 34vw);
+  border-left: 1px solid rgba(237, 231, 218, 0.08);
+  background: var(--ink);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-block {
+  padding: 1.3rem 1.4rem;
+  border-bottom: 1px solid rgba(237, 231, 218, 0.07);
+}
+
+.panel h1 {
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-weight: 400;
+  font-size: 1.55rem;
+  line-height: 1.05;
+  margin-bottom: 0.7rem;
+}
+
+.panel-lede { font-size: 0.85rem; line-height: 1.55; color: rgba(237, 231, 218, 0.78); }
+
+.panel-lede sub { font-size: 0.65em; }
+.panel-lede sup { font-size: 0.72em; }
+
+.row-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+}
+
+.row-label b { color: var(--ice); }
+
+.step-row { display: flex; gap: 0.7rem; align-items: center; }
+
+.ctl-btn {
+  background: transparent;
+  border: 1px solid var(--wire);
+  color: var(--bone);
+  min-width: 2.2rem;
+  height: 1.9rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.ctl-btn:hover { border-color: var(--ice); color: var(--ice); }
+
+input[type="range"] {
+  --p: 0%;
+  flex: 1;
+  width: 100%;
+  appearance: none;
+  -webkit-appearance: none;
+  height: 4px;
+  background: linear-gradient(90deg, var(--ice) var(--p), rgba(237, 231, 218, 0.14) var(--p));
+  cursor: pointer;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: var(--bone);
+  border: 2px solid var(--ice);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bone);
+  border: 2px solid var(--ice);
+}
+
+/* sparkline */
+#spark {
+  width: 100%;
+  height: 56px;
+  margin-top: 0.9rem;
+  background: rgba(7, 9, 12, 0.6);
+  border: 1px solid rgba(134, 215, 234, 0.18);
+}
+
+#sparkLine { stroke: var(--ice); stroke-width: 1.6; }
+
+#sparkHead { stroke: var(--amber); stroke-width: 1.4; }
+
+.spark-x {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.55rem;
+  color: rgba(139, 149, 160, 0.8);
+  margin-top: 0.35rem;
+}
+
+/* segmented buttons */
+.seg-row { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
+.seg-btn {
+  flex: 1;
+  background: transparent;
+  border: 1px solid var(--wire);
+  color: var(--muted);
+  font-size: 0.6rem;
+  padding: 0.5rem 0.4rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.2s ease, color 0.2s ease;
+}
+
+.seg-btn.active { border-color: var(--ice); color: var(--ice); }
+
+.seg-btn:hover { color: var(--bone); }
+
+/* legend */
+.legend { margin-top: 0.9rem; }
+
+.legend-bar {
+  display: block;
+  height: 10px;
+  border: 1px solid rgba(237, 231, 218, 0.15);
+  background: linear-gradient(90deg, #3b4cc0, #dddddd, #b40426);
+}
+
+.legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.55rem;
+  color: var(--muted);
+  margin-top: 0.35rem;
+}
+
+.panel-note p {
+  font-size: 0.58rem;
+  line-height: 1.7;
+  color: rgba(139, 149, 160, 0.75);
+}
+
+button:focus-visible, input:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+@media (max-width: 820px) {
+  .viewer-main { flex-direction: column; }
+  .panel { width: 100%; border-left: 0; border-top: 1px solid rgba(237, 231, 218, 0.08); }
+  .canvas-wrap { min-height: 52vh; }
+}

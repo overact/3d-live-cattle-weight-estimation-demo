@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Paper and citation for Agreement-Driven Multi-View 3D Reconstruction for Live Cattle Weight Estimation.">
+    <title>Paper | Agreement-Driven Multi-View 3D Reconstruction</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="assets/fonts/fonts.css">
+    <link rel="stylesheet" href="css/paper.css">
+    <link rel="stylesheet" href="css/global-nav.css">
+  </head>
+  <body>
+    <nav class="global-nav global-nav--overlay" aria-label="Site pages">
+      <span class="global-nav__brand">LIVE CATTLE·3D</span>
+      <a class="global-nav__link" href="agreement.html">Agreement 3D</a>
+      <a class="global-nav__link" href="index.html">Ranch</a>
+      <a class="global-nav__link global-nav__link--current" href="paper.html" aria-current="page">Paper</a>
+    </nav>
+
+    <main class="paper-shell">
+      <header class="paper-header">
+        <p class="eyebrow hud-mono">ARXIV PREPRINT · CS.CV</p>
+        <h1>Agreement-Driven Multi-View 3D Reconstruction for Live Cattle Weight Estimation</h1>
+        <p class="authors">Rabin Dulal · Wenfeng Jia · Lihong Zheng · Jane Quinn</p>
+        <p class="status">
+          <strong>Publication status.</strong> This page describes the arXiv
+          preprint. It does not assert publication in the IEEE ICIP proceedings.
+          Conference and DOI metadata will be added only when an official
+          publication record becomes available.
+        </p>
+        <div class="paper-actions hud-mono">
+          <a class="primary" href="assets/papers/agreement-driven-multiview-cattle-weight-estimation.pdf" target="_blank" rel="noopener">OPEN LOCAL PDF</a>
+          <a href="https://arxiv.org/abs/2601.17791" target="_blank" rel="noopener noreferrer">VIEW ON ARXIV ↗</a>
+          <a href="index.html">EXPLORE THE RANCH →</a>
+          <a href="agreement.html">OPEN AGREEMENT 3D →</a>
+        </div>
+      </header>
+
+      <section class="paper-summary" aria-labelledby="summaryTitle">
+        <div>
+          <p class="section-label hud-mono">PLAIN-LANGUAGE SUMMARY</p>
+          <h2 id="summaryTitle">Three ordinary RGB views, inspected as one reconstruction.</h2>
+          <p>
+            The paper asks whether matched left, right, and top RGB views can
+            support useful 3D cattle reconstruction without depth, LiDAR, or
+            stereo hardware at inference. Agreement weighting gives more
+            influence to view updates that align with cross-view consensus and
+            less to conflicting updates. Geometric features from the resulting
+            point cloud then support live-weight estimation.
+          </p>
+        </div>
+        <div>
+          <p class="section-label hud-mono">REPORTED DATASET RESULT</p>
+          <p class="result hud-mono">103 CATTLE · 5-FOLD CV<br><strong>2.22 ± 0.56% MAPE</strong><br>R² 0.69 ± 0.10</p>
+          <p class="scope-note">These are dataset-level cross-validation results, not a prediction for the interactive Case 001 animal.</p>
+        </div>
+      </section>
+
+      <section class="paper-reader" aria-label="Embedded paper PDF">
+        <object data="assets/papers/agreement-driven-multiview-cattle-weight-estimation.pdf#view=FitH" type="application/pdf">
+          <p>
+            This browser cannot display the embedded PDF.
+            <a href="assets/papers/agreement-driven-multiview-cattle-weight-estimation.pdf">Open the paper instead.</a>
+          </p>
+        </object>
+      </section>
+    </main>
+  </body>
+</html>

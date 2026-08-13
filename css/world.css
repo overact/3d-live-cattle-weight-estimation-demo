@@ -1,0 +1,1282 @@
+/* ============================================================
+   MV-SAM3D — Agreement Ranch (index.html)
+   Dusk identity: #090c10 night · #e39b2d amber · #86d7ea ice
+   ============================================================ */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --night: #090c10;
+  --amber: #e39b2d;
+  --ice: #86d7ea;
+  --paper: #e8e4da;
+  --dim: #8b95a0;
+  --line: rgba(240, 235, 225, 0.14);
+}
+
+html, body {
+  height: 100%;
+  background: var(--night);
+  color: var(--paper);
+  font-family: "Archivo", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+.hud-mono {
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- canvas + CSS2D layer ---------- */
+
+#worldWrap { position: fixed; inset: 0; }
+#gl { width: 100%; height: 100%; display: block; }
+#gl.station-targetable { cursor: pointer; }
+
+.labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.station-marker {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.62rem;
+  color: rgba(232, 228, 218, 0.85);
+  background: rgba(9, 12, 16, 0.62);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem 0.2rem 0.28rem;
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  pointer-events: auto;         /* clickable: rail-travels to the station */
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, opacity 0.18s, transform 0.18s;
+}
+
+.station-marker:hover {
+  border-color: var(--amber);
+  background: rgba(20, 16, 8, 0.8);
+}
+
+/* Canvas raycast feedback mirrors DOM-marker hover. Avoid transform here:
+   CSS2DRenderer owns the marker's inline transform every frame. */
+.station-marker.targeted,
+.station-marker.approaching {
+  border-color: var(--amber);
+  background: rgba(25, 19, 8, 0.86);
+  box-shadow: 0 0 16px rgba(227, 155, 45, 0.3);
+}
+
+.station-marker.targeted .marker-num,
+.station-marker.approaching .marker-num {
+  box-shadow: 0 0 12px rgba(227, 155, 45, 0.72);
+}
+
+.station-marker.pressed {
+  border-color: var(--ice);
+  background: rgba(13, 28, 34, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(134, 215, 234, 0.34),
+    0 0 12px rgba(134, 215, 234, 0.28);
+}
+
+.station-marker:active {
+  border-color: var(--ice);
+  background: rgba(13, 28, 34, 0.9);
+}
+
+.station-marker.arrived {
+  border-color: var(--ice);
+  background: rgba(10, 25, 31, 0.9);
+  box-shadow: 0 0 var(--arrival-glow, 5px) rgba(134, 215, 234, 0.58);
+}
+
+.station-marker.arrived .marker-num {
+  background: var(--ice);
+  box-shadow: 0 0 var(--arrival-glow, 5px) rgba(134, 215, 234, 0.72);
+}
+
+.station-marker.faded {
+  opacity: 0.16;
+  transform: scale(0.92);
+}
+
+.marker-num {
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--night);
+  background: var(--amber);
+  border-radius: 999px;
+  min-width: 1.5rem;
+  padding: 0.28rem 0;
+  text-align: center;
+}
+
+/* ---------- intro overlay (also the status / error surface) ---------- */
+
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: clamp(2rem, 5vw, 6rem);
+  padding: clamp(5.5rem, 10vh, 8rem) clamp(1.4rem, 7vw, 7rem) 2.5rem;
+  background:
+    linear-gradient(90deg, rgba(6, 9, 12, 0.96) 0%, rgba(6, 9, 12, 0.86) 34%, rgba(6, 9, 12, 0.22) 66%, transparent 100%),
+    linear-gradient(0deg, rgba(6, 9, 12, 0.45), transparent 48%);
+  transition: opacity 0.7s ease, visibility 0.7s;
+}
+
+#intro.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+.intro-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: min(44rem, 52vw);
+  text-align: left;
+}
+
+.intro-eyebrow {
+  font-size: 0.7rem;
+  color: var(--ice);
+  margin-bottom: 1rem;
+}
+
+#intro h1 {
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-size: clamp(2.6rem, 8vw, 5.4rem);
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  color: var(--paper);
+  text-shadow: 0 0 60px rgba(227, 155, 45, 0.25);
+  margin-bottom: 1rem;
+}
+
+#intro h1 em { font-style: normal; color: var(--amber); }
+
+.intro-paper-title {
+  max-width: 42rem;
+  color: var(--paper);
+  font-size: clamp(1rem, 1.55vw, 1.35rem);
+  font-weight: 650;
+  line-height: 1.25;
+  margin-bottom: 0.55rem;
+}
+
+.intro-authors {
+  color: rgba(232, 228, 218, 0.7);
+  font-size: 0.78rem;
+  line-height: 1.5;
+  margin-bottom: 1rem;
+}
+
+.intro-sub {
+  max-width: 38rem;
+  color: #c8ccd2;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  margin-bottom: 0.85rem;
+}
+
+.intro-evidence {
+  color: var(--amber);
+  font-size: 0.64rem;
+  line-height: 1.6;
+  margin-bottom: 0.65rem;
+}
+
+#introStatus {
+  min-height: 1.8rem;
+  font-size: 0.68rem;
+  line-height: 1.7;
+  color: var(--dim);
+  white-space: pre-line;
+}
+
+.intro-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 0.35rem;
+}
+
+#btnEnter,
+#btnExplore {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  border-radius: 999px;
+  padding: 0.82rem 1.5rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.3s;
+}
+
+#btnEnter {
+  color: var(--night);
+  background: var(--amber);
+  border: 1px solid var(--amber);
+  box-shadow: 0 0 30px rgba(227, 155, 45, 0.35);
+}
+
+#btnEnter:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 0 44px rgba(227, 155, 45, 0.5); }
+#btnEnter:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: 0 0 22px rgba(227, 155, 45, 0.38); }
+#btnEnter:disabled,
+#btnExplore:disabled { opacity: 0.35; cursor: wait; box-shadow: none; }
+
+#btnExplore {
+  color: var(--paper);
+  background: rgba(9, 12, 16, 0.45);
+  border: 1px solid rgba(232, 228, 218, 0.34);
+}
+#btnExplore:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--ice);
+  color: var(--ice);
+}
+#btnExplore:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+
+.intro-paper-link {
+  margin-top: 0.85rem;
+  color: rgba(232, 228, 218, 0.76);
+  font-size: 0.62rem;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(232, 228, 218, 0.26);
+  padding-bottom: 0.16rem;
+}
+.intro-paper-link:hover { color: var(--ice); border-color: var(--ice); }
+
+.intro-hint {
+  margin-top: 0.8rem;
+  font-size: 0.58rem;
+  line-height: 1.6;
+  color: rgba(139, 149, 160, 0.72);
+}
+.intro-hint--touch { display: none; }
+
+/* A terse three-beat field guide beside the poster-like intro. It shares the
+   opening surface instead of interrupting the live world with another modal. */
+.opening-guide {
+  width: min(23rem, 31vw);
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 1.15rem 0 1rem;
+  border-top: 1px solid rgba(134, 215, 234, 0.44);
+  border-bottom: 1px solid rgba(232, 228, 218, 0.18);
+  background: linear-gradient(90deg, rgba(9, 12, 16, 0.76), rgba(9, 12, 16, 0.3));
+  backdrop-filter: blur(8px);
+}
+
+.opening-guide__header,
+.opening-guide__actions {
+  display: flex;
+  align-items: center;
+  padding-inline: 0.9rem;
+}
+
+.opening-guide__header { justify-content: space-between; gap: 1rem; }
+.opening-guide__eyebrow,
+.opening-guide__count,
+.opening-guide__index {
+  color: var(--ice);
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
+.opening-guide__count { color: var(--paper); white-space: nowrap; }
+.opening-guide__count span { color: var(--amber); }
+
+.opening-guide__track {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  margin: 0.7rem 0.9rem 1.3rem;
+}
+
+.opening-guide__track span {
+  height: 2px;
+  background: rgba(232, 228, 218, 0.16);
+  transition: background 0.22s ease, box-shadow 0.22s ease;
+}
+
+.opening-guide__track span.active {
+  background: var(--amber);
+  box-shadow: 0 0 12px rgba(227, 155, 45, 0.48);
+}
+
+.opening-guide__panels {
+  min-height: 12.5rem;
+  padding-inline: 0.9rem;
+}
+
+.opening-guide__panel[hidden] { display: none; }
+.opening-guide__panel:not([hidden]) { animation: guide-panel-in 0.3s ease both; }
+.opening-guide__panel h2 {
+  max-width: 18rem;
+  margin: 0.55rem 0 0.7rem;
+  color: var(--paper);
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-size: clamp(1.2rem, 1.8vw, 1.65rem);
+  line-height: 1.04;
+}
+
+.opening-guide__panel > p:last-child {
+  color: rgba(200, 204, 210, 0.9);
+  font-size: 0.78rem;
+  line-height: 1.58;
+}
+
+.opening-guide__keys {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.42rem 0.8rem;
+  margin-top: 0.9rem;
+}
+
+.opening-guide__keys div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.65rem;
+  padding-bottom: 0.24rem;
+  border-bottom: 1px solid rgba(232, 228, 218, 0.14);
+}
+
+.opening-guide__keys dt { color: var(--amber); font-size: 0.58rem; }
+.opening-guide__keys dd { color: var(--dim); font-size: 0.52rem; }
+
+.opening-guide__actions {
+  flex-wrap: wrap;
+  gap: 0.48rem;
+  margin-top: 1rem;
+}
+
+.opening-guide__actions button {
+  border: 1px solid rgba(232, 228, 218, 0.24);
+  border-radius: 999px;
+  padding: 0.55rem 0.72rem;
+  font-size: 0.56rem;
+  cursor: pointer;
+  transition: color 0.16s ease, border-color 0.16s ease,
+    background 0.16s ease, transform 0.16s ease;
+}
+.opening-guide__actions button:disabled { opacity: 0.35; cursor: wait; }
+
+.opening-guide__back { color: var(--dim); background: transparent; }
+.opening-guide__back:disabled { cursor: default; }
+.opening-guide__next {
+  color: var(--night);
+  background: var(--amber);
+  border-color: var(--amber) !important;
+}
+.opening-guide__skip {
+  flex-basis: 100%;
+  width: max-content;
+  color: rgba(232, 228, 218, 0.62);
+  background: transparent;
+  border-color: transparent !important;
+  text-align: left;
+}
+
+.opening-guide__actions button:hover:not(:disabled) { border-color: var(--ice); color: var(--ice); }
+.opening-guide__next:hover:not(:disabled) { color: var(--night) !important; background: var(--ice); }
+.opening-guide__actions button:active:not(:disabled) { transform: scale(0.97); }
+.opening-guide__actions button:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 3px;
+}
+
+@keyframes guide-panel-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* One world-edge question, not another dashboard panel. It changes at every
+   station so the reader always knows what this exhibit is evidence for. */
+.research-guide {
+  position: fixed;
+  top: 76px;
+  left: 18px;
+  z-index: 30;
+  width: min(390px, calc(100vw - 380px));
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--amber);
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.35s, transform 0.35s;
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
+}
+.research-guide.show { opacity: 1; transform: translateY(0); }
+.research-guide__eyebrow {
+  color: var(--ice);
+  font-size: 0.56rem;
+  margin-bottom: 0.32rem;
+}
+.research-guide__question {
+  color: var(--paper);
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+}
+.research-guide__proof {
+  margin-top: 0.3rem;
+  color: rgba(200, 204, 210, 0.82);
+  font-size: 0.58rem;
+  line-height: 1.45;
+}
+
+/* One-shot controls reminder after the visitor commits to an entry mode. It
+   stays below the research question, then leaves the scene chrome alone. */
+.entry-toast {
+  position: fixed;
+  top: 172px;
+  left: 18px;
+  z-index: 44;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  width: min(440px, calc(100vw - 36px));
+  padding: 0.85rem 0.9rem 0.78rem 1rem;
+  color: var(--paper);
+  background: rgba(9, 12, 16, 0.72);
+  border: 1px solid rgba(134, 215, 234, 0.32);
+  border-left: 2px solid var(--ice);
+  border-radius: 10px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+  backdrop-filter: blur(9px);
+  -webkit-backdrop-filter: blur(9px);
+  opacity: 0;
+  transform: translateY(-7px);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.entry-toast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+.entry-toast > div { flex: 1; min-width: 0; }
+.entry-toast__eyebrow { color: var(--amber); font-size: 0.58rem; }
+.entry-toast__body {
+  margin-top: 0.38rem;
+  color: rgba(232, 228, 218, 0.9);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+.entry-toast__keys {
+  margin-top: 0.55rem;
+  color: var(--ice);
+  font-size: 0.54rem;
+  line-height: 1.45;
+}
+.entry-toast button {
+  flex: 0 0 auto;
+  width: 1.8rem;
+  height: 1.8rem;
+  padding: 0;
+  border: 1px solid rgba(232, 228, 218, 0.22);
+  border-radius: 50%;
+  color: var(--dim);
+  background: rgba(9, 12, 16, 0.35);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.entry-toast button:hover { color: var(--paper); border-color: var(--ice); }
+.entry-toast button:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; }
+
+/* ---------- HUD chrome ---------- */
+
+.station-chip {
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 30;
+  font-size: 0.68rem;
+  color: var(--amber);
+  background: rgba(9, 12, 16, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.85rem;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.station-chip.show { opacity: 1; }
+
+.dock {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(13, 16, 20, 0.72);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
+
+.dock button {
+  cursor: pointer;
+  background: transparent;
+  color: var(--dim);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  padding: 0.42rem 0.62rem;
+  transition: color 0.18s, border-color 0.18s, background 0.18s, transform 0.12s ease;
+}
+
+.dock button:hover { color: #fff; border-color: rgba(134, 215, 234, 0.5); }
+.dock button:active { transform: scale(0.94); }
+
+.dot.active {
+  color: var(--night);
+  background: var(--amber);
+  border-color: var(--amber);
+  font-weight: 700;
+}
+
+.hint {
+  position: fixed;
+  right: 18px;
+  /* clears the dock: the two only miss each other past ~1720px wide, so at
+     bottom: 18px this legend sat on top of dots 06-08 and 🐮 — and, being a
+     real element, swallowed their clicks */
+  bottom: 78px;
+  z-index: 30;
+  pointer-events: none;
+  font-size: 0.6rem;
+  color: rgba(139, 149, 160, 0.75);
+  background: rgba(9, 12, 16, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.4rem 0.8rem;
+}
+
+/* the keyboard legend is the only one a pointer user needs — the touch copy
+   surfaces solely in the ≤640px roam block below */
+.hint--touch { display: none; }
+
+/* ---------- station side panel ---------- */
+
+#stationPanel {
+  position: fixed;
+  top: 72px;
+  right: 18px;
+  z-index: 30;
+  width: min(330px, calc(100vw - 36px));
+  max-height: calc(100vh - 170px);
+  overflow-y: auto;
+  padding: 1.15rem 1.15rem 1.3rem;
+  border-radius: 14px;
+  background: rgba(11, 14, 18, 0.84);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(12px);
+  transform: translateX(calc(100% + 26px));
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#stationPanel.open { transform: translateX(0); }
+
+.panel-kicker { font-size: 0.62rem; color: var(--ice); margin-bottom: 0.55rem; }
+
+.panel-scope {
+  display: inline-block;
+  margin-bottom: 0.55rem;
+  padding: 0.2rem 0.42rem;
+  border: 1px solid rgba(134, 215, 234, 0.34);
+  border-radius: 999px;
+  color: rgba(134, 215, 234, 0.9);
+  font-size: 0.58rem;
+  line-height: 1.3;
+}
+
+#stationPanel h2 {
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-size: 1.35rem;
+  line-height: 1.1;
+  margin-bottom: 0.6rem;
+}
+
+.panel-body { font-size: 0.82rem; line-height: 1.55; color: #c8ccd2; margin-bottom: 0.8rem; }
+
+.panel-try {
+  margin: 0 0 0.7rem;
+  color: var(--paper);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+.panel-try span {
+  color: var(--amber);
+  font-size: 0.56rem;
+  margin-right: 0.35rem;
+}
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.8rem; }
+
+.chip {
+  font-size: 0.58rem;
+  color: var(--amber);
+  border: 1px solid rgba(227, 155, 45, 0.4);
+  border-radius: 999px;
+  padding: 0.22rem 0.5rem;
+  white-space: nowrap;
+}
+
+/* clickable feature-family chips (FEATURES station) */
+.chip-btn {
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s, color 0.18s;
+}
+
+.chip-btn:hover {
+  border-color: var(--ice);
+  color: var(--ice);
+  background: rgba(134, 215, 234, 0.08);
+}
+.chip-btn:active { transform: scale(0.97); }
+
+.chip-btn.active {
+  color: var(--night);
+  background: var(--amber);
+  border-color: var(--amber);
+  font-weight: 700;
+}
+
+.panel-fig {
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  margin-bottom: 0.7rem;
+  background: #0c0f13;
+}
+
+/* pipeline intro rows (overview panel) */
+.pipe-rows { display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.9rem; }
+
+.pipe-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  font-size: 0.66rem;
+  color: var(--paper);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.45rem 0.6rem;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+
+.pipe-row:hover { border-color: var(--ice); background: rgba(134, 215, 234, 0.08); }
+.pipe-row:active { transform: scale(0.985); background: rgba(134, 215, 234, 0.13); }
+
+.pipe-num {
+  flex: none;
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-size: 0.85rem;
+  color: var(--amber);
+  min-width: 1.1rem;
+  text-align: center;
+}
+
+#btnStartTour {
+  width: 100%;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--night);
+  background: var(--amber);
+  border: none;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+#btnStartTour:hover { transform: translateY(-1px); box-shadow: 0 0 26px rgba(227, 155, 45, 0.45); }
+#btnStartTour:active { transform: translateY(0) scale(0.985); box-shadow: 0 0 15px rgba(227, 155, 45, 0.34); }
+
+.panel-links { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.panel-link {
+  font-size: 0.66rem;
+  color: var(--paper);
+  text-decoration: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  transition: border-color 0.18s, color 0.18s, background 0.18s;
+}
+
+.panel-link:hover {
+  color: var(--night);
+  background: var(--amber);
+  border-color: var(--amber);
+}
+.panel-link:active { filter: brightness(0.88); }
+
+/* ---------- roam mode: calf speech bubble, camera flash, dock toggle ---------- */
+
+.cow-bubble {
+  max-width: 250px;
+  font-size: 0.63rem;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--paper);
+  background: rgba(9, 12, 16, 0.64);
+  border: 1px solid rgba(227, 155, 45, 0.38);
+  border-radius: 12px;
+  padding: 0.45rem 0.65rem;
+  white-space: normal;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.72);
+  -webkit-backdrop-filter: blur(5px) saturate(1.08);
+  backdrop-filter: blur(5px) saturate(1.08);
+  /* CSS2DRenderer writes an inline transform every frame — animate opacity only */
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.cow-bubble.show { opacity: 1; }
+
+.cow-bubble::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  transform: translateX(-50%) rotate(45deg);
+  background: rgba(9, 12, 16, 0.64);
+  border-right: 1px solid rgba(227, 155, 45, 0.38);
+  border-bottom: 1px solid rgba(227, 155, 45, 0.38);
+}
+
+/* S1 easter egg: three synced "camera" flashes */
+#roamFlash {
+  position: fixed;
+  inset: 0;
+  z-index: 44;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+}
+
+#roamFlash.go { animation: roam-flash 0.9s ease-out; }
+
+@keyframes roam-flash {
+  0%, 17%, 34%       { opacity: 0; }
+  6%, 23%, 40%       { opacity: 0.85; }
+  50%, 100%          { opacity: 0; }
+}
+
+#btnRoam { font-size: 0.98rem; }
+
+#btnRoam.active {
+  color: var(--night);
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #roamFlash.go { animation: none; }
+}
+
+/* ---------- tour mode hides all chrome ---------- */
+
+body.tour .ui,
+body.tour .labels,
+body.tour #stationPanel { display: none !important; }
+
+/* ---------- reduced motion / mobile ---------- */
+
+@media (prefers-reduced-motion: reduce) {
+  #intro, #stationPanel, .station-chip, .entry-toast, .opening-guide__track span { transition: none; }
+  .opening-guide__panel:not([hidden]) { animation: none; }
+  .dock button, .chip-btn, .pipe-row, #btnStartTour { transition: none; }
+}
+
+@media (max-width: 900px) {
+  #intro {
+    display: block;
+    align-items: flex-start;
+    overflow-y: auto;
+  }
+  .intro-copy { width: 100%; }
+  .opening-guide {
+    width: 100%;
+    max-width: 38rem;
+    margin-top: 1.5rem;
+  }
+  .opening-guide__panels { min-height: 9.5rem; }
+}
+
+@media (max-width: 640px) {
+  #intro {
+    align-items: flex-start;
+    overflow-y: auto;
+    padding: 7.5rem 1.15rem 1.2rem;
+    background:
+      linear-gradient(0deg, rgba(6, 9, 12, 0.98) 0%, rgba(6, 9, 12, 0.84) 54%, rgba(6, 9, 12, 0.16) 100%);
+  }
+  .intro-copy { width: 100%; }
+  #intro h1 { font-size: clamp(2.5rem, 15vw, 4rem); margin-bottom: 0.65rem; }
+  .intro-paper-title { font-size: 0.92rem; }
+  .intro-authors { font-size: 0.68rem; margin-bottom: 0.65rem; }
+  .intro-sub { font-size: 0.8rem; line-height: 1.45; margin-bottom: 0.55rem; }
+  .intro-evidence { font-size: 0.62rem; margin-bottom: 0.35rem; }
+  #introStatus { min-height: 1.3rem; font-size: 0.56rem; }
+  .intro-actions { width: 100%; gap: 0.5rem; }
+  #btnEnter, #btnExplore { flex: 1 1 auto; font-size: 0.62rem; padding: 0.72rem 0.8rem; }
+  .intro-hint--desktop { display: none; }
+  .intro-hint--touch { display: block; }
+  .opening-guide__panels { min-height: 0; }
+
+  .research-guide {
+    top: 160px;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    padding: 0.5rem 0.65rem;
+    border-left: 2px solid var(--amber);
+    background: linear-gradient(90deg, rgba(9, 12, 16, 0.82), rgba(9, 12, 16, 0.18));
+  }
+  .research-guide__question { font-size: 0.8rem; }
+  .research-guide__proof { font-size: 0.58rem; }
+
+  .entry-toast {
+    top: 238px;
+    left: 12px;
+    width: calc(100vw - 24px);
+  }
+  .entry-toast__body { font-size: 0.72rem; }
+  .entry-toast__keys { font-size: 0.5rem; }
+
+  .panel-scope { font-size: 0.62rem; }
+
+  #stationPanel {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 78px;
+    width: 100%;
+    max-height: 38vh;
+    border-radius: 14px 14px 0 0;
+    transform: translateY(calc(100% + 84px));
+  }
+  #stationPanel.open { transform: translateY(0); }
+  .hint { display: none; }
+  /* the overlay nav wraps to three rows on a phone and swallowed the chip */
+  .station-chip { bottom: auto; top: 118px; }
+
+  /* At desktop metrics the dock is ~600px wide: on a phone #dots collapsed
+     into a 9-high column that the station panel then covered completely,
+     taking 🐮 — the only way in or out of roam — with it. Drop the ←/→
+     (every station is one dot away) and tighten the rest into one row. */
+  .dock { gap: 0.25rem; padding: 0.4rem 0.45rem; }
+  #btnPrev, #btnNext { display: none; }
+  #dots { display: flex; gap: 0.25rem; }
+  .dock button { min-width: 2rem; padding: 0.42rem 0.2rem; }
+
+  /* roam is unplayable without a legend, and the keyboard one above is hidden
+     here — give touch its own copy, parked below the chip so neither the
+     wrapped nav nor the bottom sheet can bury it */
+  body.roaming .hint--touch {
+    display: block;
+    right: 12px;
+    left: 12px;
+    bottom: auto;
+    top: 156px;
+    text-align: center;
+    /* one line at 390px, and opaque enough to stay legible over the bright
+       pasture and the station markers it floats above */
+    font-size: 0.55rem;
+    padding: 0.42rem 0.7rem;
+    color: rgba(200, 206, 214, 0.92);
+    background: rgba(9, 12, 16, 0.8);
+  }
+
+  /* The calf bubble and touch legend coach roam on phones. Keeping the
+     station research guide at the same top edge creates a three-layer HUD. */
+  body.roaming .research-guide { display: none; }
+}
+
+/* ---------- pipeline handoff chrome (travel caption · IN/OUT · dot links) ---------- */
+
+/* Deliberately not `.ui`: the tour hides all chrome except this narration. */
+.travel-caption {
+  position: fixed;
+  top: 62px;                /* below the global-nav pill (top: 12px) */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 55;              /* under the nav (60), over the canvas */
+  max-width: min(92vw, 620px);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--amber);
+  background: rgba(9, 12, 16, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.42rem 1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.35s;
+}
+.travel-caption.show { opacity: 1; }
+
+/* panel footer: the station's place in the dataflow, both ends clickable */
+.io-footer {
+  margin-top: 0.9rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.io-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: transparent;
+  border: 0;
+  padding: 0.1rem 0;
+  font: 500 0.64rem 'IBM Plex Mono', monospace;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--dim);
+  cursor: pointer;
+  transition: color 0.18s;
+}
+button.io-row:hover { color: #fff; }
+button.io-row:active { color: var(--amber); }
+.io-row--end { cursor: default; }
+.io-tag { color: var(--ice); min-width: 2.2em; }
+.io-arrow { color: var(--amber); }
+
+/* thin connectors between the dock dots — one per pipeline leg.
+   #dots needs flex here: the links are empty spans and only render as lines
+   in a flex row (the phone block below hides them and keeps the old dock). */
+#dots { display: inline-flex; align-items: center; gap: 0.25rem; }
+.dot-link {
+  flex: 0 0 auto;
+  width: 0.55rem;
+  height: 1px;
+  background: var(--line);
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.dot-link.active {
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(227, 155, 45, 0.8);
+}
+
+/* the tour rides the world clock — a seek-and-capture recorder must not
+   race a wall-clock fade, so the caption snaps in tour mode */
+body.tour .travel-caption { transition: none; }
+
+/* ---------- calf-guided evidence cargo ---------- */
+
+.carry-status {
+  position: fixed;
+  left: 18px;
+  bottom: 82px;
+  z-index: 43;
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  min-width: 238px;
+  padding: 0.58rem 0.76rem;
+  color: var(--ice);
+  background: rgba(9, 12, 16, 0.78);
+  border: 1px solid rgba(134, 215, 234, 0.26);
+  border-radius: 8px;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+  transition: opacity 0.24s ease, transform 0.32s cubic-bezier(.2,.8,.2,1),
+    border-color 0.2s ease;
+}
+.carry-status.show { opacity: 1; transform: translateY(0); }
+.carry-status.processing { border-color: rgba(227, 155, 45, 0.72); }
+.carry-status.deposit { background: rgba(20, 16, 8, 0.82); }
+.carry-status.waiting { border-color: rgba(227, 155, 45, 0.5); }
+.carry-status.pickup { border-color: rgba(134, 215, 234, 0.8); }
+.carry-status.confirmed {
+  border-color: rgba(134, 215, 234, 0.92);
+  box-shadow: 0 0 18px rgba(134, 215, 234, 0.2);
+}
+.carry-status.rejected {
+  border-color: rgba(227, 155, 45, 0.92);
+  animation: carry-reject 0.18s ease-in-out 2;
+}
+.carry-status::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -42%;
+  width: 34%;
+  pointer-events: none;
+  opacity: 0;
+  transform: skewX(-18deg);
+  background: linear-gradient(90deg, transparent, rgba(134, 215, 234, 0.32), transparent);
+}
+.carry-status.confirmed::after { animation: carry-confirm-sweep 0.62s ease-out both; }
+.carry-status__mark {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
+  border: 2px solid var(--ice);
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(134, 215, 234, 0.55);
+  transition: border-color 0.18s ease, background 0.18s ease,
+    transform 0.18s ease, box-shadow 0.18s ease;
+}
+.carry-status.processing .carry-status__mark {
+  border-color: var(--amber);
+  animation: carry-spin 0.72s linear infinite;
+  box-shadow: 0 0 13px rgba(227, 155, 45, 0.72);
+}
+.carry-status.pickup .carry-status__mark {
+  border-color: var(--ice);
+  animation: carry-pickup 0.56s ease-in-out infinite alternate;
+  box-shadow: 0 0 15px rgba(134, 215, 234, 0.78);
+}
+.carry-status.confirmed .carry-status__mark {
+  position: relative;
+  border-color: var(--ice);
+  background: var(--ice);
+  transform: rotate(0) scale(1.08);
+  animation: carry-confirm 0.36s cubic-bezier(.2,.9,.25,1.25) both;
+  box-shadow: 0 0 16px rgba(134, 215, 234, 0.8);
+}
+.carry-status.confirmed .carry-status__mark::after {
+  content: "✓";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  color: var(--night);
+  font: 700 9px/1 system-ui, sans-serif;
+  transform: translate(-50%, -52%);
+}
+.carry-status.rejected .carry-status__mark {
+  border-color: var(--amber);
+  box-shadow: 0 0 12px rgba(227, 155, 45, 0.7);
+}
+.carry-status__copy { display: grid; gap: 0.12rem; }
+.carry-status strong {
+  color: #edf3f5;
+  font-size: 0.65rem;
+  letter-spacing: 0.075em;
+  font-weight: 500;
+}
+.carry-status small {
+  color: var(--dim);
+  font-size: 0.52rem;
+  letter-spacing: 0.07em;
+}
+@keyframes carry-spin { to { transform: rotate(405deg); } }
+@keyframes carry-pickup {
+  from { transform: rotate(45deg) scale(0.9); }
+  to { transform: rotate(135deg) scale(1.08); }
+}
+@keyframes carry-confirm {
+  from { transform: rotate(0) scale(0.62); }
+  to { transform: rotate(0) scale(1.08); }
+}
+@keyframes carry-confirm-sweep {
+  0% { left: -42%; opacity: 0; }
+  18% { opacity: 1; }
+  100% { left: 112%; opacity: 0; }
+}
+@keyframes carry-reject {
+  from { box-shadow: 0 0 0 rgba(227, 155, 45, 0); }
+  to { box-shadow: 0 0 14px rgba(227, 155, 45, 0.34); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .travel-caption { transition: none; }
+  .carry-status { transition: none; }
+  .carry-status,
+  .carry-status::after,
+  .carry-status .carry-status__mark { animation: none !important; }
+}
+@media (max-width: 640px) {
+  /* dock invariant (see ~line 455): ≤372px on a phone. The eight leg links
+     would push it to ~440px and shove 🐮 off a 390px screen, so they are
+     desktop-only — the ground chevrons and the caption still carry the leg. */
+  .dot-link { display: none; }
+  /* below the wrapped nav (bottom ~110px) and the relocated chip (top 118),
+     wrapping to two lines instead of clipping a 60-char caption */
+  .travel-caption {
+    top: 156px;
+    font-size: 0.58rem;
+    max-width: 94vw;
+    white-space: normal;
+    line-height: 1.6;
+    border-radius: 14px;
+    text-overflow: clip;
+  }
+  .carry-status {
+    left: 10px;
+    bottom: 116px;
+    min-width: 0;
+    max-width: calc(100vw - 20px);
+    padding: 0.48rem 0.62rem;
+  }
+}
+@media (max-width: 380px) {
+  /* 360-class phones: the 640px tier still leaves the dock at its historical
+     372px (12 × 2rem buttons + gaps) — one more notch keeps 🐮 on-screen */
+  .dock { gap: 0.15rem; padding: 0.3rem 0.3rem; }
+  .dock button { min-width: 1.6rem; padding: 0.38rem 0.1rem; }
+}
+
+/* ---------- research tier-1: step scrubber · source crumbs · visited dots ---------- */
+
+/* RECON REPLAY scrubber (stations 03/04, desktop dwell only). .ui on purpose:
+   the ?tour=1 recorder must stay pure autoplay, and body.tour hides .ui. */
+.step-scrubber {
+  position: fixed;
+  left: 50%;
+  bottom: 128px;            /* clear of the dock pill AND the hint row */
+  transform: translateX(-50%);
+  z-index: 45;
+  display: none;
+  align-items: center;
+  gap: 0.55rem;
+  width: min(44vw, 440px);
+  padding: 0.34rem 0.75rem;
+  background: rgba(9, 12, 16, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.58rem;
+  letter-spacing: 0.07em;
+  color: var(--dim);
+}
+.step-scrubber.show { display: flex; }
+.scrub-play {
+  background: transparent;
+  border: 0;
+  padding: 0 0.1rem;
+  color: var(--ice);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.scrub-play:hover { color: #fff; }
+.scrub-play:active:not(:disabled) { transform: scale(0.9); }
+.scrub-play:disabled { color: #6d747b; cursor: wait; }
+.step-scrubber.is-loading .scrub-track { cursor: wait; opacity: 0.5; }
+.scrub-tag { color: var(--amber); white-space: nowrap; }
+.scrub-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 14px;
+  cursor: pointer;
+  touch-action: none;
+}
+.scrub-track::before {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 50%;
+  height: 3px;
+  transform: translateY(-50%);
+  background: var(--line);
+  border-radius: 2px;
+}
+.scrub-tick {
+  position: absolute;
+  top: 50%;
+  width: 1px;
+  height: 7px;
+  transform: translate(-50%, -50%);
+  background: rgba(134, 215, 234, 0.4);
+}
+.scrub-tick--stage {
+  height: 11px;
+  width: 2px;
+  background: var(--amber);
+}
+.scrub-head {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 9px;
+  height: 9px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 6px rgba(227, 155, 45, 0.7);
+  pointer-events: none;
+}
+.scrub-label { white-space: nowrap; min-width: 7.5em; text-align: right; color: var(--ice); }
+
+/* the subject's three source views, pinned atop every station panel */
+.crumb-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0 0 0.75rem;
+  padding: 0.3rem 0;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+.crumb-strip--hot { opacity: 0.92; }
+.crumb-strip:hover { opacity: 1; }
+.crumb-strip:active { opacity: 0.78; }
+.crumb-strip img {
+  width: 44px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+}
+.crumb-label {
+  font: 500 0.56rem 'IBM Plex Mono', monospace;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+  margin-right: 0.25rem;
+}
+
+/* pipeline progress: visited stations fill in, walked legs solidify */
+#dots .dot { opacity: 0.62; }
+#dots .dot.visited:not(.active) { opacity: 1; border-color: rgba(227, 155, 45, 0.45); }
+#dots .dot.active { opacity: 1; }
+.dot-link.solid:not(.active) { background: rgba(227, 155, 45, 0.4); }
+
+/* ≤1136px: the centered pill starts colliding with the right-side station
+   panel once the panel's max-height clips it downward (1024×768 booth
+   machines ate clicks at the overlap) — anchor it left of the panel */
+@media (max-width: 1136px) {
+  .step-scrubber { left: 18px; right: 366px; transform: none; width: auto; max-width: 440px; }
+}
+
+@media (max-width: 640px) {
+  /* phones keep the auto loop — the dock and caption own this space */
+  .step-scrubber { display: none !important; }
+  .crumb-strip img { width: 36px; height: 25px; }
+}

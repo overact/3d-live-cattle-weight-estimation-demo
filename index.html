@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="3D Live Cattle Weight Estimation — an interactive Three.js show demo for agreement-driven multi-view reconstruction.">
+    <title>Agreement Ranch | Interactive Multi-View 3D Reconstruction</title>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="assets/fonts/fonts.css">
+    <link rel="stylesheet" href="css/world.css?v=20260813-entry-toast">
+    <link rel="stylesheet" href="css/global-nav.css">
+  </head>
+  <body>
+    <nav class="global-nav global-nav--overlay ui" aria-label="Site pages">
+      <span class="global-nav__brand">LIVE CATTLE·3D</span>
+      <a class="global-nav__link" href="agreement.html">Agreement 3D</a>
+      <a class="global-nav__link global-nav__link--current" href="index.html" aria-current="page">Ranch</a>
+      <a class="global-nav__link" href="paper.html">Paper</a>
+    </nav>
+
+    <div id="worldWrap">
+      <canvas id="gl"></canvas>
+    </div>
+
+    <!-- HUD chrome (hidden in ?tour=1) -->
+    <div class="station-chip hud-mono ui" id="stationChip"></div>
+
+    <div class="carry-status hud-mono ui" id="carryStatus" aria-live="polite">
+      <span class="carry-status__mark" aria-hidden="true"></span>
+      <span class="carry-status__copy">
+        <strong data-carry-label>NO EVIDENCE YET</strong>
+        <small data-carry-next>WALK TO STEP 01</small>
+      </span>
+    </div>
+
+    <div class="dock ui" aria-label="Station navigation">
+      <button class="hud-mono" id="btnPrev" type="button" aria-label="Previous station">←</button>
+      <span id="dots" aria-label="Stations"></span>
+      <button class="hud-mono" id="btnNext" type="button" aria-label="Next station">→</button>
+      <button class="hud-mono" id="btnRoam" type="button" aria-label="Free-roam the ranch as a calf" title="Free-roam (C)">🐮</button>
+    </div>
+
+    <p class="hint hud-mono ui">L-DRAG ORBIT · R-DRAG PAN · CTRL+L / SCROLL ZOOM · CLICK EXHIBITS · C ROAM · ESC MAP</p>
+    <!-- touch legend: only ever shown on small screens while body.roaming,
+         where the keyboard legend above is display:none -->
+    <p class="hint hint--touch hud-mono ui">TAP A NUMBER TO WALK THERE · DRAG TO LOOK · 🐮 EXIT</p>
+
+    <section id="researchGuide" class="research-guide hud-mono ui" aria-live="polite" aria-label="Current research question">
+      <p class="research-guide__eyebrow">RESEARCH QUESTION · <span id="guideStep">00 / 08</span></p>
+      <p class="research-guide__question" id="guideQuestion">How can three RGB views become kilograms?</p>
+      <p class="research-guide__proof" id="guideProof">Follow the amber evidence path through the paper.</p>
+    </section>
+
+    <section id="entryToast" class="entry-toast ui" role="status" aria-live="polite" aria-atomic="true">
+      <div>
+        <p class="entry-toast__eyebrow hud-mono" data-entry-toast-title></p>
+        <p class="entry-toast__body" data-entry-toast-body></p>
+        <p class="entry-toast__keys hud-mono" data-entry-toast-keys></p>
+      </div>
+      <button type="button" data-entry-toast-close aria-label="Dismiss controls reminder" hidden>×</button>
+    </section>
+
+    <aside id="stationPanel" class="ui" aria-live="polite"></aside>
+
+    <!-- intro overlay: entry gesture + loading/diagnostics surface -->
+    <div id="intro">
+      <div class="intro-copy">
+        <p class="intro-eyebrow hud-mono">ARXIV PREPRINT · INTERACTIVE RESEARCH DEMO</p>
+        <h1>AGREEMENT<br><em>RANCH</em></h1>
+        <p class="intro-paper-title">Agreement-Driven Multi-View 3D Reconstruction<br>for Live Cattle Weight Estimation</p>
+        <p class="intro-authors">Rabin Dulal · Wenfeng Jia · Lihong Zheng · Jane Quinn</p>
+        <p class="intro-sub">
+          Walk the evidence from matched left, right, and top RGB views to a
+          dataset-validated weight estimate. Take control of the calf on the
+          guided route; no scale or depth sensor is required at inference.
+        </p>
+        <p class="intro-evidence hud-mono">103 CATTLE · 5-FOLD CV · AGREEMENT: 2.22% MAPE · R² 0.69</p>
+        <div id="introStatus" class="hud-mono" aria-live="polite">CHECKING WEBGL…</div>
+        <div class="intro-actions">
+          <button id="btnEnter" class="hud-mono" type="button" disabled>START CALF-GUIDED TRAIL</button>
+          <button id="btnExplore" class="hud-mono btn-secondary" type="button" disabled>EXPLORE FREELY</button>
+        </div>
+        <a class="intro-paper-link hud-mono" href="paper.html">READ THE PAPER →</a>
+        <p class="intro-hint intro-hint--desktop hud-mono">THE AMBER PATH FOLLOWS THE METHOD · CLICK EXHIBITS · 0–8 JUMP · C ROAM · ESC MAP</p>
+        <p class="intro-hint intro-hint--touch hud-mono">GUIDED STARTS AS THE CALF · TAP STATIONS · DRAG TO LOOK · 🐮 TO ENTER / EXIT</p>
+      </div>
+
+      <aside id="openingGuide" class="opening-guide" aria-label="Opening guide" data-step="0">
+        <header class="opening-guide__header">
+          <p class="opening-guide__eyebrow hud-mono">BEFORE YOU ENTER · FIELD GUIDE</p>
+          <p class="opening-guide__count hud-mono" aria-live="polite">
+            <span data-guide-current>01</span> / 03
+          </p>
+        </header>
+
+        <div class="opening-guide__track" aria-hidden="true">
+          <span class="active"></span><span></span><span></span>
+        </div>
+
+        <div class="opening-guide__panels" aria-live="polite">
+          <section class="opening-guide__panel" data-guide-panel="0">
+            <p class="opening-guide__index hud-mono">01 · READ THE ROUTE</p>
+            <h2>Follow the amber evidence trail.</h2>
+            <p>Stations 00–08 mirror the paper pipeline. Each arrival starts the next hand-off, from three RGB views to an evaluated weight estimate.</p>
+          </section>
+          <section class="opening-guide__panel" data-guide-panel="1" hidden>
+            <p class="opening-guide__index hud-mono">02 · TAKE CONTROL</p>
+            <h2>Drive the calf—or inspect freely.</h2>
+            <p>The guided trail puts you behind the calf. Move manually or send it straight to a numbered station; choose Explore Freely for the orbitable paper map.</p>
+            <dl class="opening-guide__keys hud-mono">
+              <div><dt>WASD</dt><dd>MOVE</dd></div>
+              <div><dt>SHIFT</dt><dd>RUN</dd></div>
+              <div><dt>DRAG</dt><dd>LOOK</dd></div>
+              <div><dt>0–8</dt><dd>AUTO-RUN</dd></div>
+            </dl>
+          </section>
+          <section class="opening-guide__panel" data-guide-panel="2" hidden>
+            <p class="opening-guide__index hud-mono">03 · WATCH THE HAND-OFF</p>
+            <h2>Notice what moves—and what stays.</h2>
+            <p>The calf carries evidence between workcells. At Step 03 only the left photo is submitted; right and top stay with the calf until left returns and the three views reunite.</p>
+          </section>
+        </div>
+
+        <footer class="opening-guide__actions">
+          <button id="guideBack" class="opening-guide__back hud-mono" type="button" disabled>← BACK</button>
+          <button id="guideNext" class="opening-guide__next hud-mono" type="button">NEXT →</button>
+          <button id="guideSkip" class="opening-guide__skip hud-mono" type="button" disabled>SKIP · START TRAIL</button>
+        </footer>
+      </aside>
+    </div>
+
+    <!-- Bump the module URL when the world runtime changes: some static booth
+         servers cache ES-module graphs more aggressively than the HTML. -->
+  <script type="module" src="js/world/main.js?v=20260813-entry-toast"></script>
+  </body>
+</html>

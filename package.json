@@ -1,0 +1,9 @@
+{
+  "name": "3d-live-cattle-weight-estimation-demo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Three-page static show demo for agreement-driven live-cattle reconstruction and weight estimation.",
+  "scripts": {
+    "verify": "node scripts/check-public.mjs"
+  }
+}

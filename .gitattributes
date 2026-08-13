@@ -1,0 +1,9 @@
+*.bin binary
+*.glb binary
+*.gif binary
+*.jpg binary
+*.jpeg binary
+*.png binary
+*.webp binary
+*.woff2 binary
+*.pdf binary

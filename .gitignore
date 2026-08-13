@@ -1,0 +1,4 @@
+output/
+.playwright-cli/
+__pycache__/
+*.pyc
