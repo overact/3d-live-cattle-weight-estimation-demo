@@ -24,7 +24,16 @@ The interactive case views and reconstruction traces are recorded research artif
 
 Reconstruction comparisons should be interpreted through the paper's visual evidence and downstream weight-estimation protocol. The demo does not claim direct geometric accuracy without corresponding ground-truth geometry metrics.
 
-Case 001 source views originate from [CowDB](https://github.com/ruchaya/CowDB), the public cattle image database described by Ruchay et al., *MethodsX* 7 (2020), [doi:10.1016/j.mex.2020.100870](https://doi.org/10.1016/j.mex.2020.100870). Research artifacts and source data remain subject to their original rights; project maintainers should confirm redistribution terms before mirroring them elsewhere.
+Case 001 source views originate from [CowDB](https://github.com/ruchaya/CowDB), the public cattle image database described by Ruchay et al., “Accurate body measurement of live cattle using three depth cameras and non-rigid 3-D shape recovery,” *Computers and Electronics in Agriculture* 179 (2020), 105821, [doi:10.1016/j.compag.2020.105821](https://doi.org/10.1016/j.compag.2020.105821). Research artifacts and source data remain subject to their original rights; project maintainers should confirm redistribution terms before mirroring them elsewhere.
+
+## Acknowledgements
+
+This demo builds on the research and open-source implementations provided by:
+
+- [MV-SAM3D](https://github.com/devinli123/MV-SAM3D), a multi-view 3D reconstruction framework extending SAM 3D Objects to multiple viewpoints.
+- [SAM 3D Objects](https://github.com/facebookresearch/sam-3d-objects), the foundational single-image 3D object reconstruction model and codebase.
+
+We thank the authors and maintainers of both projects for making their work and code available. Please consult the original repositories for their citation and license terms.
 
 ## Citation
 
