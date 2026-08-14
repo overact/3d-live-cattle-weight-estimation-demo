@@ -32,6 +32,9 @@ html, body {
 #worldWrap { position: fixed; inset: 0; }
 #gl { width: 100%; height: 100%; display: block; }
 #gl.station-targetable { cursor: pointer; }
+/* main.js toggles this on pointerdown over an exhibit; without a rule the
+   press had marker feedback but no cursor feedback. */
+#gl.station-pressed { cursor: grabbing; }
 
 .labels {
   position: absolute;
@@ -100,8 +103,9 @@ html, body {
 }
 
 .station-marker.faded {
+  /* opacity only: CSS2DRenderer rewrites an inline `transform` every frame,
+     and inline beats a class rule, so a scale here never applied. */
   opacity: 0.16;
-  transform: scale(0.92);
 }
 
 .marker-num {
@@ -415,6 +419,20 @@ html, body {
   text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
 }
 .research-guide.show { opacity: 1; transform: translateY(0); }
+/* Still not a dashboard panel — a scrim, not a card. The exhibits' own canvas
+   boards are bright white text on black, and at several stations one lands
+   directly behind this question; a text-shadow alone loses that fight. The
+   gradient fades to nothing before its right edge, so the pasture still shows
+   through and the guide keeps reading as part of the world. */
+.research-guide::before {
+  content: "";
+  position: absolute;
+  inset: -0.7rem -3rem -0.9rem -1.4rem;
+  background: radial-gradient(115% 100% at 0% 50%,
+    rgba(8, 11, 15, 0.86), rgba(8, 11, 15, 0) 76%);
+  z-index: -1;
+  pointer-events: none;
+}
 .research-guide__eyebrow {
   color: var(--ice);
   font-size: 0.56rem;

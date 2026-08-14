@@ -22,18 +22,30 @@ export const STATIONS = [
      long backtracking hook: 05→06 bends south-west, then 06→07 turns north-
      west and naturally feeds the future line. */
   { id: "features",    num: "06", name: "FEATURES",    pos: V( -4, 0, -38), look: V( -4, 2.2, -38), cam: V(  2.0, 4.0,-29.0), dwell: 11 },
-  /* The dwell looks north-west through the result: the barn at (-24,-40) sits
-     clearly behind the Step-07 exhibit instead of beside the southern loop. */
-  { id: "weigh",       num: "07", name: "WEIGH",       pos: V(-18, 0, -22), look: V(-18, 2.6, -22), cam: V(-13.5, 4.2, -8.5), dwell: 11 },
+  /* The exhibit faces whoever WALKS here, and they always arrive from 06 to
+     the south-east. `cam` is what stations.js faceCam yaws the boards toward,
+     so the dwell camera and the visitor have to stand on the same side; with
+     cam to the north-east the walk-up came in 120° behind the results board
+     and, since every board is a FrontSide plane, saw nothing at all. Facing
+     south-east puts the walk-up at ~12° off-front and costs only a shorter
+     06→07 rail leg. Also closer and higher than the old 14.2 u / 6.4° pose,
+     which made the world's widest exhibit read small and flat next to 01-06:
+     now 13.5 u at 10.9°, back in family.
+     (The barn no longer stands behind this exhibit — see environment.js.) */
+  { id: "weigh",       num: "07", name: "WEIGH",       pos: V(-18, 0, -22), look: V(-18, 2.6, -22), cam: V(-7.2, 5.2, -30.1), dwell: 11 },
   /* The walk target stays east of the paddock. The northbound deployment line
      sits beyond the north fence; look/cam frame it from its clear east side. */
   { id: "future",      num: "08", name: "FUTURE",      pos: V(-28, 0, 14), look: V(-40, 2.1, 14), cam: V(-27.5, 5.0, 14), dwell: 10 }
 ];
 
 /* Keep the ranch readable behind the opening guide and give free-explore a
-   clearer plan view. The horizontal framing is unchanged; only the default
-   eye height is raised. */
-export const OVERVIEW = { pos: V(6, 50, 60), target: V(0, 0, 2) };
+   clearer plan view. Higher and steeper than it was (44.5° above the ground
+   vs 40.6°), and aimed at the station centroid (-9, 2) rather than the world
+   origin, so all nine stations sit inside the frame with air around them.
+   Height rather than distance does the widening on purpose: the fog reaches
+   full strength at 165 u, so backing the camera off instead would have washed
+   the whole ranch grey. */
+export const OVERVIEW = { pos: V(2, 68, 62), target: V(-9, 0, 2) };
 
 /* Curve through dwell cameras with lifted flyover waypoints between. */
 const railPts = [];

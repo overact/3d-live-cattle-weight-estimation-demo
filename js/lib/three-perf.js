@@ -28,11 +28,44 @@ export class LightRig {
     this.slots.get(slot).push(...lights);
   }
   setFocus(i) {
+    this._focus = i;
     const all = i == null || i < 0;
     for (const [slot, lights] of this.slots) {
       const on = all || Math.abs(slot - i) <= this.span;
       for (const l of lights) l.visible = on;
     }
+  }
+
+  /* Compile one program set per distinct lit-spot COUNT, up front.
+
+     three.js keys its program cache on the number of lights of each type in
+     the scene, so every time setFocus changes how many spots are visible, the
+     next frame recompiles every lit material in view. Measured on the first
+     walk into station 01's gantry: overview lights all 12 spots, the station
+     dwell lights 3, and that transition compiled 10 new programs inside a
+     single 532 ms frame — the stall a visitor feels exactly once per session,
+     at the worst possible moment.
+
+     Distinct COUNTS are what matters, not distinct focus values: focus 2 and
+     focus 3 both light three slots and share a program set. There are only a
+     handful, so this is a few compiles paid behind the loading screen. */
+  prewarm(renderer, scene, camera) {
+    const previous = this._focus ?? null;
+    const seen = new Set();
+    let compiled = 0;
+    for (const focus of [null, ...this.slots.keys()]) {
+      this.setFocus(focus);
+      let lit = 0;
+      for (const lights of this.slots.values()) {
+        for (const l of lights) if (l.visible) lit++;
+      }
+      if (seen.has(lit)) continue;
+      seen.add(lit);
+      renderer.compile(scene, camera);
+      compiled++;
+    }
+    this.setFocus(previous);
+    return { configurations: compiled };
   }
 }
 

@@ -109,7 +109,19 @@ export function startStationTextures() {
     return;
   }
   stationTexturesStarted = true;
-  for (const start of deferredTextureStarts.splice(0)) start();
+  /* Release in small batches instead of one synchronous loop. Firing all of
+     them at once put six 1280x720 decodes on the same millisecond, so their
+     GPU uploads landed in the same frame — measured as part of the stall on
+     first arrival at station 01. Idle callbacks spread that over a few frames;
+     the boards fill in a beat later, which nobody sees. */
+  const queue = deferredTextureStarts.splice(0);
+  const pump = () => {
+    for (let n = 0; n < 2 && queue.length; n++) queue.shift()();
+    if (!queue.length) return;
+    if ("requestIdleCallback" in window) requestIdleCallback(pump, { timeout: 120 });
+    else requestAnimationFrame(pump);
+  };
+  pump();
 }
 
 /* immediate thumbnail-only cache for the gate pipeline board. Its filenames
@@ -2888,9 +2900,17 @@ function buildWeigh(scene, s) {
     { name: "TRELLIS2",   v: 2.64, hot: false },
     { name: "AGREEMENT",  v: 2.22, hot: true }
   ];
+  /* Wing offset and toe-in are shared by the MAPE and R² charts so the exhibit
+     stays symmetric. At ±6.15 this was the widest exhibit in the world (half-
+     width 8.45) shot from its furthest dwell (14.2 u), which pushed the far R²
+     bar — and on 1280-wide screens its title too — under the 330 px side panel.
+     ±4.9 with a shallower toe-in keeps both charts inboard of the panel down to
+     1280x800 while staying legibly angled. */
+  const WING_X = 4.9, WING_TOE = 0.4;
   const chart = new THREE.Group();
-  chart.position.set(-6.15, 0, 0.85);
-  chart.rotation.y = 0.5;
+  chart.name = "weighMapeChart";   // QA measures its screen rect by name
+  chart.position.set(-WING_X, 0, 0.85);
+  chart.rotation.y = WING_TOE;
   chart.scale.setScalar(0.86);
   const SPACING = 0.78, H_MAX = 3.1;
   const chartW = (BARS.length - 1) * SPACING + 1.3;
@@ -2980,8 +3000,9 @@ function buildWeigh(scene, s) {
     { name: "AGREEMENT",  v: 0.69, hot: true }
   ];
   const r2Chart = new THREE.Group();
-  r2Chart.position.set(6.15, 0, 0.85);
-  r2Chart.rotation.y = -0.5;
+  r2Chart.name = "weighR2Chart";   // QA measures its screen rect by name
+  r2Chart.position.set(WING_X, 0, 0.85);
+  r2Chart.rotation.y = -WING_TOE;
   r2Chart.scale.setScalar(0.86);
   const R2_SPACING = SPACING, R2_H_MAX = H_MAX;
   const r2ChartW = chartW;
@@ -3757,6 +3778,14 @@ export function buildStations(
     }
   }
 
+  /* Compile every station-light configuration while the loading screen is
+     still up. Without this the first station a visitor reaches pays 10 shader
+     compiles in one frame, because focusing a station changes how many spots
+     are lit and three.js caches programs per light count. */
+  function prewarmLights(renderer, scene, camera) {
+    return lightRig.prewarm(renderer, scene, camera);
+  }
+
   /* a station became active (dwell / tour dwell) — arms grow-on-dwell exhibits */
   function setActive(i, t) {
     activeI = i;
@@ -3783,7 +3812,7 @@ export function buildStations(
   }
 
   return {
-    attachModel, update, setActive, clearActive,
+    attachModel, update, setActive, clearActive, prewarmLights,
     pipelineTarget,
     setAgreementGhosted(on) { exhibits[5].setAgreementGhosted?.(on); },
     markModelLoading(key) { exhibits[5].markModelLoading?.(key); },

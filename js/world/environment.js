@@ -256,10 +256,15 @@ function vnoise(x, z) {
   return a + (b - a) * sx + (c - a) * sz + (a - b - c + d) * sx * sz;
 }
 
+/* Where the barn stands and which way it faces. Module-level because its pad
+   and its placement have to move together — a pad left behind would flatten
+   30 u of empty pasture and leave the barn on a slope. */
+const BARN = { x: -46, z: -44, ry: 1.0 };
+
 /* Flat pads under stations + barn + herd paddock so exhibits sit level. */
 const PADS = [
   ...STATIONS.map((s) => ({ x: s.pos.x, z: s.pos.z, r: 9 })),
-  { x: -24, z: -40, r: 13 },  // barn
+  { x: BARN.x, z: BARN.z, r: 13 },
   { x: -40, z: 2, r: 13 },    // paddock
   { x: -40, z: 14, r: 9 }     // Station 08 northbound factory line
 ];
@@ -279,7 +284,15 @@ export function groundHeight(x, z) {
 /* ---------- terrain ---------- */
 
 function buildTerrain() {
-  const geo = new THREE.PlaneGeometry(160, 160, 96, 96);
+  /* 240 wide, not 160. Everything built on this ground lives inside +/-50 and
+     roam is clamped to r <= 74, so the extra skirt is pure horizon: at 160 the
+     plane's own edge cut a hard diagonal across the sky in any view wide
+     enough to show all nine stations, which is exactly what the default
+     overview is for. The corners now sit ~170 u out, past the fog's 165 far
+     plane, so the pasture fades into haze instead of ending. Segment count
+     rises with the size to keep the 1.667 u vertex spacing the pads and the
+     path ribbon were tuned against. */
+  const geo = new THREE.PlaneGeometry(240, 240, 144, 144);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
@@ -413,9 +426,16 @@ function buildFireflies() {
 /* ---------- glowing rail path ribbon (ground projection of the tour) ---------- */
 
 function buildPathRibbon() {
-  const curve = new THREE.CatmullRomCurve3(
-    STATIONS.map((s) => new THREE.Vector3(s.pos.x, 0, s.pos.z)),
-    false, "centripetal", 0.5);
+  /* The ribbon runs through station centres, which is right for 00-07 because
+     each exhibit stands on its own `pos`. Station 08 is the exception: its
+     `pos` is only the walk target, and the deployment line it names sits 9 u
+     further west at look.x + 3. The ribbon therefore used to stop short and
+     point at empty grass, which read as the guide path coming apart at the
+     last step. One extra control point carries it onto the line itself. */
+  const last = STATIONS[STATIONS.length - 1];
+  const points = STATIONS.map((s) => new THREE.Vector3(s.pos.x, 0, s.pos.z));
+  points.push(new THREE.Vector3(last.look.x + 5, 0, last.pos.z));
+  const curve = new THREE.CatmullRomCurve3(points, false, "centripetal", 0.5);
 
   /* curve param at each station (centripetal params are not uniform) */
   const probe = new THREE.Vector3();
@@ -588,20 +608,41 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
     })
   ]);
 
-  /* barn near S6 */
+  /* The barn is the ranch's one building, and it belongs on the horizon of the
+     southern loop, not inside it.
+
+     It used to stand at (-24,-40) with ry 0.75. That put it EXACTLY collinear
+     with station 07's dwell camera and its look point — both reduce to a slope
+     of 1/3 — so for the whole 11 s dwell its roof rose 0.20 NDC (a tenth of
+     screen height) out of the top edge of the results board, cropped below by
+     the board and above by the handoff plaque, with no visible ground contact.
+     At station 06 the same barn filled the left third and its ridge touched the
+     top frame edge, clipping on anything narrower than 16:9.
+
+     Retreating along the axis cannot fix it: the roof only drops under the
+     board's silhouette past ~77 u, and the pasture is 80 u to the edge. So it
+     moves OFF the axis instead. From (-46,-44) it clears station 07's board for
+     most of the dwell, drops out of frame-left at station 06, and reads as a
+     distant west-horizon landmark from the gate. ry 1.0 keeps the facade (the
+     GLB's only detailed wall, at local +Z) within ±15° of both dwell cameras
+     that can see it — tighter than the ±24° it had before. */
   const barn = fitHeight(barnG.scene, 8.5);
   liftMaterials(barn, 0.04);
-  settle(barn, -24, -40, 0.75);
+  /* Measure the footprint BEFORE the yaw. addBox takes ry in exactly the
+     scene's convention (obb-collider.js:31), so the barn's own axes go
+     straight in; taking the world AABB of the yawed model instead doubled the
+     collider area and left 4.15 u of invisible wall on each diagonal. */
+  const barnBox = new THREE.Box3().setFromObject(barn);
+  settle(barn, BARN.x, BARN.z, BARN.ry);
   scene.add(barn);
   {
-    /* footprint measured off the placed model rather than guessed. The world
-       AABB is a little larger than the yawed barn, and deliberately so: solving
-       back to the barn's own axes is singular near 45° (it sits at 43°), and a
-       slightly generous hull around a building nobody should touch is free. */
-    const bb = new THREE.Box3().setFromObject(barn);
-    const half = bb.getSize(new THREE.Vector3()).multiplyScalar(0.5);
-    const mid = bb.getCenter(new THREE.Vector3());
-    colliders.addBox(mid.x, mid.z, half.x, half.z);
+    const half = barnBox.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+    const mid = barnBox.getCenter(new THREE.Vector3());
+    const cos = Math.cos(BARN.ry), sin = Math.sin(BARN.ry);
+    colliders.addBox(
+      BARN.x + mid.x * cos + mid.z * sin,
+      BARN.z - mid.x * sin + mid.z * cos,
+      half.x, half.z, BARN.ry);
   }
 
   /* fence template — normalize so its long axis is local X */
@@ -654,7 +695,11 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
      gaps are wide enough for the calf's 0.8 u hull with room to spare, and
      stationApproach() below steers auto-runs through them. Station 08 now sits
      outside to the north-east, reached without entering the paddock. */
-  const GATE = 1.9;                     // half-width of an opening
+  /* Half-width of an opening. 1.9 put the capture pen's north gate post at
+     z 36.9 while the amber guide ribbon crosses x = -34 at z 37.0 — the route
+     ran through the rail by 0.1 u and the calf straddled the post. 2.6 puts the
+     crossing 0.6 u inside the opening and is still one fence panel wide. */
+  const GATE = 2.6;
   const PEN_GATE = { x: S1.x - 4, z: S1.z };        // capture pen, facing the ranch gate
   const PADDOCK_GATE = { x: PAD_X1, z: PAD.z };     // paddock, on the weigh-lane axis
 
@@ -809,6 +854,10 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
     const r = 56 + hash2(i, 97) * 22;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     if (STATIONS.some((s) => Math.hypot(x - s.pos.x, z - s.pos.z) < 15)) continue;
+    /* Canopies are ~2.4 u across at the top of the scale range, and the ring's
+       hash jitter had put four pairs inside each other (closest 2.16 u), which
+       reads as one forked tree rather than two. */
+    if (pinePlacements.some((q) => Math.hypot(x - q.x, z - q.z) < 7)) continue;
     pinePlacements.push({
       x, z,
       ry: hash2(i, 103) * Math.PI * 2,
@@ -818,13 +867,20 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
   scene.add(instanceTemplate(pineG.scene, pinePlacements, groundHeight));
 
   /* hay bales */
-  /* Keep the south bale clear of the widened 06→07 guide ribbon. */
-  [[-20, 40], [-2, 14], [20, 20], [26, -14], [15, -66], [-32, -12]].forEach(([x, z], i) => {
+  /* Keep the south bale clear of the widened 06→07 guide ribbon — and out of
+     pine #23 at (15.1,-67.6), which it used to stand 1.6 u from, i.e. inside
+     the trunk. */
+  [[-20, 40], [-2, 14], [20, 20], [26, -14], [9, -60], [-32, -12]].forEach(([x, z], i) => {
     const h = 1.1 + hash2(i, 113) * 0.3;
     const hay = fitHeight(hayG.scene.clone(true), h);
     settle(hay, x, z, hash2(i, 127) * Math.PI);
     scene.add(hay);
-    colliders.addCircle(x, z, 0.95, h);   // round bale: a circle is the true shape
+    /* Round bale: a circle is the true shape — but take the radius from the
+       placed model, not a constant. A flat 0.95 was ~2.2x the real 0.38-0.49,
+       so the calf bounced off a metre and a half of empty grass. */
+    const hb = new THREE.Box3().setFromObject(hay);
+    const r = Math.max(hb.max.x - hb.min.x, hb.max.z - hb.min.z) / 2;
+    colliders.addCircle(x, z, r, h);
   });
 
   /* ---- ambient herd (one rigged cow, cloned five times) ----

@@ -307,9 +307,18 @@ export function makeStationMarkers(scene, onGoto) {
       `<span class="marker-num">${i}</span><span class="marker-name">${s.name}</span>`;
     el.addEventListener("click", () => onGoto(i));
     const obj = new CSS2DObject(el);
-    /* Station 08's deployment console has a taller provenance header. Lift its
-       DOM marker so it cannot paint over the in-scene truth labels. */
-    obj.position.set(s.pos.x, i === 8 ? 6.35 : 5.6, s.pos.z);
+    /* Station 08's deployment console has a taller provenance header, so its
+       marker is lifted clear of the in-scene truth labels. It also has to sit
+       over the CONVEYOR rather than over `pos`: 08's dwell camera parks 1.4 u
+       from pos and looks past it down the line, so a badge anchored at pos
+       lands ~70 deg above the view axis and never appears during its own
+       dwell. `look` is the thing the camera is actually aimed at, and sitting
+       over the conveyor pushes the badge far enough down the view axis to
+       clear the global nav bar as well. */
+    const anchor = i === 8
+      ? { x: s.look.x + 3, y: 6.35, z: s.pos.z }
+      : { x: s.pos.x, y: 5.6, z: s.pos.z };
+    obj.position.set(anchor.x, anchor.y, anchor.z);
     scene.add(obj);
     markers.push(el);
   });

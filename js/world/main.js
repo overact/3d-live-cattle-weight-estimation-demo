@@ -85,7 +85,15 @@ let entryToastShowTimer = null;
 let entryToastHideTimer = null;
 
 function hideEntryToast(force = false) {
-  if (!force && entryToastEl.contains(document.activeElement)) return;
+  /* A keyboard user parked on the × must not lose the auto-hide: dropping the
+     intent here left the reminder over the world until they clicked or blurred
+     out. Re-arm instead, so focus delays the dismissal rather than cancelling
+     it. focusout re-arms too, so the two paths cannot both be pending. */
+  if (!force && entryToastEl.contains(document.activeElement)) {
+    clearTimeout(entryToastHideTimer);
+    entryToastHideTimer = setTimeout(() => hideEntryToast(), 1200);
+    return;
+  }
   clearTimeout(entryToastShowTimer);
   clearTimeout(entryToastHideTimer);
   entryToastEl.classList.remove("show");
@@ -113,6 +121,9 @@ function showEntryToast(destination) {
 entryToastClose.addEventListener("click", () => hideEntryToast(true));
 entryToastEl.addEventListener("focusout", () => {
   if (entryToastEl.classList.contains("show")) {
+    /* focus/blur inside the toast fires repeatedly; without this clear the
+       handles stack and a stale one can close the NEXT toast on sight. */
+    clearTimeout(entryToastHideTimer);
     entryToastHideTimer = setTimeout(() => hideEntryToast(), 1200);
   }
 });
@@ -144,6 +155,10 @@ const showFatal = (msg, err) => {
   btnExplore.disabled = true;
   /* Core failures happen before the normal ENTER listener is installed. */
   btnEnter.onclick = () => location.reload();
+  /* The guide's own buttons mirror btnEnter.disabled, and only the success
+     path re-rendered after flipping it — so a fatal load left SKIP and START
+     TRAIL greyed out beside a working RETRY. */
+  renderOpeningGuide(openingGuideStep);
 };
 
 function renderOpeningGuide(nextStep) {
@@ -477,7 +492,6 @@ async function main() {
     setApproachStation(-1);
     if (arrivalStation >= 0) {
       markerEls[arrivalStation].classList.remove("arrived");
-      markerEls[arrivalStation].style.removeProperty("--arrival-pulse");
       markerEls[arrivalStation].style.removeProperty("--arrival-glow");
     }
     arrivalStation = -1;
@@ -508,8 +522,10 @@ async function main() {
       const k = Math.min(1, Math.max(0, (worldTime - arrivalStart) / 1.05));
       const fade = 1 - k;
       const easeOut = 1 - (1 - k) * (1 - k);
+      /* --arrival-glow is the only channel world.css reads (.station-marker
+         .arrived); a second --arrival-pulse write was a per-frame inline-style
+         mutation nothing consumed. */
       const pulse = REDUCED ? fade : Math.sin(Math.PI * k);
-      markerEls[arrivalStation].style.setProperty("--arrival-pulse", pulse.toFixed(3));
       markerEls[arrivalStation].style.setProperty("--arrival-glow", `${(5 + 17 * pulse).toFixed(1)}px`);
       showTargetRing(arrivalStation, 0x86d7ea, 0.64 * fade,
         REDUCED ? 1 : 0.86 + 0.30 * easeOut);
@@ -1086,6 +1102,15 @@ async function main() {
     document.activeElement?.blur?.(); // keep movement keys flowing to the world
     introEl.classList.add("hidden");
     renderLifecycle.start();
+    /* Both routes reach stations 01-03 early, and their case-view textures are
+       the other half of the first-arrival stall. Start them here, during the
+       fly-down, so the decodes are done before anyone walks under the gantry.
+       startStationTextures already paces its own queue and is idempotent. */
+    if ("requestIdleCallback" in window) {
+      requestIdleCallback(() => startStationTextures(), { timeout: 2500 });
+    } else {
+      setTimeout(startStationTextures, 700);
+    }
     if (destination === "overview") {
       /* EXPLORE FREELY means the paper map, not an involuntary mode switch.
          The primary CALF-GUIDED route keeps the automatic entrance. */
@@ -1100,6 +1125,18 @@ async function main() {
   btnExplore.addEventListener("click", () => enterWorld("overview"));
 
   /* ---- on-demand exhibit GLBs: keep READY/ENTER free of ~35 MB parsing ---- */
+  /* Version PER ASSET, never per build. The query string is part of the HTTP
+     cache key, so a shared stamp made a returning visitor re-download
+     trellis2 (17.1 MB) + average (6.3) + entropy (5.9) + agreement (5.8) —
+     35 MB of byte-identical data — every time any one model changed. Only
+     rgbd.glb was regenerated (5648993); the other four are untouched since
+     they were authored and must stay cacheable. Add a key here when, and only
+     when, that asset's bytes change. */
+  const MODEL_VERSION = { rgbd: "20260813-camera-mount-review" };
+  const modelUrl = (key) => {
+    const base = `assets/cases/case_001/models/${key}.glb`;
+    return MODEL_VERSION[key] ? `${base}?v=${MODEL_VERSION[key]}` : base;
+  };
   const modelRequests = new Map();
   const pauseForPaint = () => new Promise((resolve) => {
     if ("requestIdleCallback" in window) requestIdleCallback(resolve, { timeout: 250 });
@@ -1112,9 +1149,7 @@ async function main() {
       let lastError = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const response = await fetch(
-            `assets/cases/case_001/models/${key}.glb?v=20260813-camera-mount-review`
-          );
+          const response = await fetch(modelUrl(key));
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           const buf = await response.arrayBuffer();
           const gltf = await new Promise((res, rej) =>
@@ -1261,6 +1296,19 @@ async function main() {
   }
 
   /* ---- ready ---- */
+  /* Pay the station-light shader compiles here, where a stall is expected and
+     hidden, instead of in the first frame the visitor reaches an exhibit.
+     Focusing a station changes how many spots are lit, and three.js caches
+     programs per light count — measured at 10 compiles in one 532 ms frame on
+     the first walk under station 01's gantry. Fail-soft: a warm cache is an
+     optimisation, never a requirement for the world to open. */
+  showStatus(`WARMING SHADERS ${loadStamp}`);
+  try {
+    stations.prewarmLights(renderer, scene, camera);
+  } catch (err) {
+    console.warn("station light prewarm skipped:", err);
+  }
+
   /* The deterministic recorder may seek anywhere immediately, so it is the
      one route that deliberately waits for both evidence traces. */
   if (TOUR) {

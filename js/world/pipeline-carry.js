@@ -416,6 +416,8 @@ export function createPipelineCarry({
   let outputReadySince = null;
   let enabled = false;
   let ghosted = false;
+  const GHOST_HOLD_S = 1.0;   // how long the collected model reads as taken
+  let ghostReleaseAt = 0;
   let weightReady = false;
   let cycleCount = 0;
   let nextRunId = 1;
@@ -430,9 +432,14 @@ export function createPipelineCarry({
   const retainedFollow = new THREE.Vector3();
   let followReady = false;
   const target = new THREE.Vector3();
+  /* update() runs every frame in every mode (main.js calls it unconditionally),
+     so its carrier-home vector is hoisted. It cannot alias `target`:
+     updateTransition may call carrierTarget again inside the same frame. */
+  const home = new THREE.Vector3();
 
   function setGhosted(on) {
     ghosted = !!on;
+    if (!ghosted) ghostReleaseAt = 0;
     setAgreementGhosted(ghosted && enabled);
   }
 
@@ -541,7 +548,15 @@ export function createPipelineCarry({
     phase = "pickup";
     hudConfirmUntil = 0;
     outputReadySince = null;
-    if (stationIndex === 5) setGhosted(true);
+    /* Ghosting the plinth model says "you are carrying this now". It used to
+       stay ghosted all the way to the station-06 delivery, so the compare
+       exhibit sat near-invisible for the whole walk. Release it on its own
+       short timer instead — the same reasoning station 01 already uses for its
+       prints, which rest at home rather than waiting to be earned. */
+    if (stationIndex === 5) {
+      setGhosted(true);
+      ghostReleaseAt = t + (REDUCED_MOTION ? 0.2 : GHOST_HOLD_S);
+    }
     startEffects(at);
     if (stationIndex === 3) {
       updateHud("SINGLE-VIEW 3D COMPLETE · STAYS ON WORKCELL",
@@ -926,11 +941,14 @@ export function createPipelineCarry({
   }
 
   function update(dt, t, subject, heading) {
-    const home = carrierTarget(subject, heading).clone();
+    home.copy(carrierTarget(subject, heading));
     if (hudConfirmUntil && t >= hudConfirmUntil) {
       hudConfirmUntil = 0;
       updateHud();
     }
+    /* Ahead of the !enabled bail: leaving roam mid-carry must not strand the
+       compare exhibit at 8% opacity for the rest of the session. */
+    if (ghostReleaseAt && t >= ghostReleaseAt) setGhosted(false);
     root.visible = enabled && displayVisualIndex > 0;
     retainedRoot.visible = enabled && retainedViewsActive;
     if (retainedViewsActive) {

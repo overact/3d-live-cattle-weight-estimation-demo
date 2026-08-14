@@ -613,6 +613,65 @@ export function initRoam({
     autoFace = { i, left: 1.4 };
     rig.boostChase();
   }
+  /* ---- arriving in FRONT of an exhibit ----
+
+     Every station's signage is yawed to face that station's dwell camera
+     (stations.js faceCam), and canvasPlane builds MeshBasicMaterial, which
+     defaults to THREE.FrontSide. So arriving from behind an exhibit does not
+     merely read obliquely — the board, its titles, every value label and the
+     handoff plaque render as nothing at all.
+
+     Auto-run used to finish at the station's bare centre, on whatever side it
+     happened to come from. Walking 06 → 07 that is 120 deg behind the results
+     board: you arrive to two bar charts and a pair of bare posts. enter() has
+     always spawned on the front axis; auto-run now finishes there too — but
+     only when the natural approach is oblique enough to be worth the detour,
+     so short and already-frontal runs keep exactly their old path. */
+  const FRONT_STOP = 3.6;      // enter()'s spawn offset, so both paths agree
+  const FRONT_SWING = 11;      // clears the widest exhibit's 7.1 u half-width
+  const FRONT_MIN_DOT = 0.7;   // ~45 deg; inside that the board already reads
+
+  function stationFrontDir(i) {
+    const s = STATIONS[i];
+    const dx = s.cam.x - s.pos.x, dz = s.cam.z - s.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 2) return { x: dx / d, z: dz / d };
+    /* Station 08's cam sits 0.5 u from its pos — too short a baseline to
+       trust as a bearing. Its exhibit is offset west instead, so the front
+       is simply the side away from the look point. */
+    const lx = s.pos.x - s.look.x, lz = s.pos.z - s.look.z;
+    const l = Math.hypot(lx, lz) || 1;
+    return { x: lx / l, z: lz / l };
+  }
+
+  /* Waypoints that bring an auto-run to the readable side of exhibit i.
+
+     The last one is ALWAYS the front-stop point, never the station centre.
+     update()'s final-leg radius is 3.4 u, so a waypoint at the centre parks
+     the calf 3.4 u from it and the chase camera ~10 u from the board — close
+     enough that a 7.4 x 4.2 board overflows the frame top and both charts
+     crop. Stopping 3.4 u short of `pos + f * 3.6` instead puts the calf at
+     ~7 u and the camera at ~14, which is the station's own dwell distance. */
+  function frontApproachLegs(i, fromX, fromZ) {
+    const s = STATIONS[i];
+    const f = stationFrontDir(i);
+    const front = { x: s.pos.x + f.x * FRONT_STOP, z: s.pos.z + f.z * FRONT_STOP };
+    const ax = fromX - s.pos.x, az = fromZ - s.pos.z;
+    const a = Math.hypot(ax, az);
+    if (a < 1e-3) return [front];
+    if ((ax / a) * f.x + (az / a) * f.z >= FRONT_MIN_DOT) return [front];
+    /* Coming in oblique or from behind: swing wide on whichever side the calf
+       is already on, then come down the front axis. Exhibits register no
+       colliders, so without the lateral leg the calf would walk straight
+       through the board on its way to standing in front of it. */
+    const rx = -f.z, rz = f.x;
+    const side = Math.sign(ax * rx + az * rz) || 1;
+    return [
+      { x: s.pos.x + rx * FRONT_SWING * side, z: s.pos.z + rz * FRONT_SWING * side },
+      front
+    ];
+  }
+
   function travelTo(i) {
     /* Numeric auto-run knows the destination before proximity detection does;
        arm its evidence transfer while the calf is still travelling. */
@@ -627,7 +686,7 @@ export function initRoam({
        env hands back whichever enclosure legs are required before the target. */
     const p = rig.state.pos;
     const legs = env.stationApproach(i, p.x, p.z);
-    legs.push({ x: STATIONS[i].pos.x, z: STATIONS[i].pos.z });
+    legs.push(...frontApproachLegs(i, p.x, p.z));
     autoTravel = { i, legs, closest: Infinity, stall: 0 };
     learned.sent = true;
     rig.press("run", true);
