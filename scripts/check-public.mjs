@@ -82,9 +82,15 @@ const dynamicRuntime = [
   "assets/cases/case_001/views/display/mask_left.png",
   "assets/cases/case_001/views/display/mask_right.png",
   "assets/cases/case_001/views/display/mask_top_aligned.png",
+  /* Full-resolution views referenced from data (the recon meta.json `source`
+     blocks), not from code — the static collectors never see them. */
+  "assets/cases/case_001/views/rgb_left.png", "assets/cases/case_001/views/rgb_right.png",
+  "assets/cases/case_001/views/rgb_top.png", "assets/cases/case_001/views/mask_left.png",
+  "assets/cases/case_001/views/mask_right.png", "assets/cases/case_001/views/mask_top_aligned.png",
   "assets/world/barn_big_quaternius.glb", "assets/world/fence_quaternius.glb",
   "assets/world/hay_quaternius.glb", "assets/world/pinetree_quaternius.glb",
-  "assets/world/cow_quaternius.glb", "assets/world/thumbs/rgb_left.webp",
+  "assets/world/cow_quaternius.glb", "assets/world/candidates/cow_cubepet_kenney.glb",
+  "assets/world/thumbs/rgb_left.webp",
   "assets/world/thumbs/rgb_right.webp", "assets/world/thumbs/rgb_top.webp",
   "assets/world/thumbs/mask_left.webp", "assets/world/thumbs/mask_right.webp",
   "assets/world/thumbs/mask_top_aligned.webp", "assets/figures/global_agreement.png",
