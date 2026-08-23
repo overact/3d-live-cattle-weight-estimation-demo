@@ -7,7 +7,7 @@
     <title>Agreement Ranch | Interactive Multi-View 3D Reconstruction</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="assets/fonts/fonts.css">
-    <link rel="stylesheet" href="css/world.css?v=20260813-controls-ready">
+    <link rel="stylesheet" href="css/world.css?v=20260823-open-world-polish">
     <link rel="stylesheet" href="css/global-nav.css">
   </head>
   <body>
@@ -19,11 +19,12 @@
     </nav>
 
     <div id="worldWrap">
-      <canvas id="gl"></canvas>
+      <canvas id="gl" aria-label="Interactive 3D ranch showing the MV-SAM3D research pipeline"></canvas>
     </div>
 
     <!-- HUD chrome (hidden in ?tour=1) -->
-    <div class="station-chip hud-mono ui" id="stationChip"></div>
+    <button class="station-chip hud-mono ui" id="stationChip" type="button"
+      aria-label="Toggle current station details" aria-expanded="false"></button>
 
     <div class="carry-status hud-mono ui" id="carryStatus" aria-live="polite">
       <span class="carry-status__mark" aria-hidden="true"></span>
@@ -131,6 +132,6 @@
 
     <!-- Bump the module URL when the world runtime changes: some static booth
          servers cache ES-module graphs more aggressively than the HTML. -->
-  <script type="module" src="js/world/main.js?v=20260813-camera-mount-review"></script>
+  <script type="module" src="js/world/main.js?v=20260823-step05-turntable-step08-reliable"></script>
   </body>
 </html>

@@ -6,26 +6,30 @@ import * as THREE from "../../vendor/three.module.js";
 import { OrbitControls } from "../../vendor/OrbitControls.js";
 import { GLTFLoader } from "../../vendor/GLTFLoader.js";
 import { CSS2DRenderer } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260813-camera-mount-review";
-import { buildEnvironment } from "./environment.js?v=20260813-camera-mount-review";
-import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260813-camera-mount-review";
+import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
+import { buildEnvironment } from "./environment.js?v=20260823-step05-turntable-step08-reliable";
+import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260823-step05-turntable-step08-reliable";
 import { needsFullSourceTextures } from "./source-texture-policy.js";
-import { initPanels, makeStationMarkers } from "./panels.js?v=20260813-camera-mount-review";
+import { initPanels, makeStationMarkers } from "./panels.js?v=20260823-step05-turntable-step08-reliable";
 import { initTravelCaption } from "./travel-caption.js?v=20260813-rgbd-pointcloud";
 import { initStepScrubber } from "./step-scrubber.js?v=20260812-view-routing";
 import { initReaderGuide } from "./reader-guide.js?v=20260812-gantry-trigger";
-import { initRoam } from "./roam.js?v=20260813-camera-mount-review";
-import { createPipelineCarry } from "./pipeline-carry.js?v=20260813-camera-mount-review";
+import { initRoam } from "./roam.js?v=20260823-step05-turntable-step08-reliable";
+import { createPipelineCarry } from "./pipeline-carry.js?v=20260823-step05-turntable-step08-reliable";
 /* Version the changed world graph together. An old cached pre-bind-pose avatar
    adapter scales a cloned SkinnedMesh to ~1/900 and leaves only its shadow. */
 import { createGlbCattle } from "../lib/glb-cattle.js?v=20260811-fast-dense";
 import { loadReconSteps } from "../lib/recon-player.js?v=20260812-virtual-clock";
-import { planQuality, readDeviceSignals } from "../lib/device-tier.js";
+import {
+  AdaptivePixelRatio,
+  planQuality,
+  readDeviceSignals
+} from "../lib/device-tier.js?v=20260823-adaptive-dpr";
 import {
   createRenderLifecycle,
   handleRenderPageHide,
   handleRenderPageShow
-} from "./render-lifecycle.js";
+} from "./render-lifecycle.js?v=20260823-step05-turntable-step08-reliable";
 
 /* ---------- params / flags ---------- */
 
@@ -36,6 +40,7 @@ const TOUR = params.get("tour") === "1";
    explicit opt-out used by manual-entry QA and reduced showcase variants. */
 const AUTO_ROAM = !TOUR && params.get("autoroam") !== "0";
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const COMPACT_UI = matchMedia("(max-width: 640px)").matches;
 /* How much world this device can afford, decided once. The recorder is the
    deliverable video, so it always renders at full quality regardless of the
    machine it happens to run on. */
@@ -114,7 +119,7 @@ function showEntryToast(destination) {
   entryToastShowTimer = setTimeout(() => {
     entryToastClose.hidden = false;
     entryToastEl.classList.add("show");
-    entryToastHideTimer = setTimeout(() => hideEntryToast(), 9000);
+    entryToastHideTimer = setTimeout(() => hideEntryToast(), COMPACT_UI ? 5200 : 9000);
   }, REDUCED ? 80 : 420);
 }
 
@@ -196,7 +201,7 @@ renderOpeningGuide(0);
 /* ---------- main ---------- */
 
 async function main() {
-  if (TOUR) document.body.classList.add("tour");
+  if (TOUR) document.body.classList.add("tour", "world-entered");
 
   const probe = document.createElement("canvas");
   if (!probe.getContext("webgl2") && !probe.getContext("webgl")) {
@@ -213,7 +218,17 @@ async function main() {
   });
   renderer.setPixelRatio(QUALITY.pixelRatio);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.5;
+  renderer.toneMappingExposure = 1.42;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  const adaptivePixelRatio = new AdaptivePixelRatio({
+    maxPixelRatio: QUALITY.pixelRatio,
+    minPixelRatio: QUALITY.pixelRatioFloor,
+    /* fixed-step and tour captures must stay pixel-identical across machines */
+    enabled: !TOUR && fixedStep === null
+  });
+  let lastIntroFrameMs = null;
+  let lastLiveFrameMs = null;
+  const INTRO_FRAME_INTERVAL_MS = 1000 / 12;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
@@ -262,6 +277,12 @@ async function main() {
     css2d.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    /* setSize reallocates and may clear the drawing buffer. Reduced-motion
+       onboarding normally renders only once, so explicitly invalidate that
+       still and schedule its replacement after an orientation/viewport change. */
+    lastIntroFrameMs = null;
+    if (REDUCED && !document.body.classList.contains("world-entered") &&
+        renderLifecycle?.isRunning) requestAnimationFrame(renderFrame);
   }
   window.addEventListener("resize", resize);
   resize();
@@ -405,6 +426,11 @@ async function main() {
 
   /* ---- state machine ---- */
   let worldTime = 0;
+  /* Authored presentation sequences use elapsed wall time in the interactive
+     world. Physics keeps its defensive 50 ms clamp, but a low frame rate must
+     not stretch Station 08's advertised 15-second factory pass indefinitely. */
+  let stationRuntimeTime = 0;
+  let lastStationRuntimeFrameMs = null;
   let mode = TOUR ? "tour-wait" : "intro";  // intro | travel | dwell | overview | roam | tour
   let worldEntered = false;
   let pendingEntryToast = null;
@@ -423,6 +449,10 @@ async function main() {
   function revealEntryToast(destination) {
     if (pendingEntryToast !== destination) return;
     pendingEntryToast = null;
+    /* On a phone, the compact station sheet plus the onboarding toast leaves
+       almost no ranch to see. The chip remains visible as the explicit drawer
+       handle, so the visitor can reopen details after reading the controls. */
+    if (COMPACT_UI) panels.hidePanel();
     showEntryToast(destination);
   }
 
@@ -580,7 +610,7 @@ async function main() {
     controls.update();
     panels.showStation(i);
     readerGuide.show(i);
-    stations.setActive(i, worldTime);
+    stations.setActive(i, worldTime, stationRuntimeTime);
     env.setActiveLeg(i);   // panels.showStation above owns the dock leg link
     travelCaption.hide();
     /* the scrubber binds to the recon stations only; TOUR never dwells here
@@ -603,6 +633,7 @@ async function main() {
   }
 
   function startTravel(kind, b, dur, opts = {}) {
+    hideEntryToast(true);
     const from = poseNow();
     const final = opts.final ?? b;
     const to = opts.to ?? null;
@@ -729,6 +760,7 @@ async function main() {
   }
   function enterRoam() {
     if (mode !== "dwell" && mode !== "overview") return;
+    hideEntryToast(true);
     clearWorldTargetFeedback();
     mode = "roam";
     travel = null;
@@ -786,6 +818,14 @@ async function main() {
     } else { // overview
       p = arcPose(travel.from, OVERVIEW, k, 4);
     }
+    /* The S0 arch sits directly on the first outbound rail. A landscape camera
+       clears it, but a portrait crop otherwise flies through the hanging sign.
+       Add a short mobile-only crane move, returning to the authored path before
+       the second half of the journey. */
+    if (COMPACT_UI && travel.a === 0 &&
+        (travel.kind === "rail" || travel.kind === "direct") && k < 0.55) {
+      p.pos.y += 5 * Math.sin(Math.PI * k / 0.55);
+    }
     applyPose(p);
     if (k >= 1) {
       const t = travel;
@@ -811,7 +851,7 @@ async function main() {
       if (active !== null) {
         requestModelsForStation(active);
         if (needsFullSourceTextures(active)) startStationTextures();
-        stations.setActive(active, t);
+        stations.setActive(active, t, t);
         env.setActiveLeg(active);
       } else {
         stations.clearActive();
@@ -823,8 +863,29 @@ async function main() {
   /* ---- loop ---- */
   const clock = new THREE.Clock();
   const _panV = new THREE.Vector3();
-  function renderFrame() {
-    const dt = fixedStep !== null ? fixedStep : Math.min(clock.getDelta(), 0.05);
+  function renderFrame(frameMs = performance.now()) {
+    /* The live ranch remains visible behind onboarding, but a reading surface
+       does not need 60 full WebGL renders per second. Reduced-motion visitors
+       get a single still frame; everyone else gets a calm 12 fps background. */
+    if (mode === "intro") {
+      if (lastIntroFrameMs !== null &&
+          (REDUCED || frameMs - lastIntroFrameMs < INTRO_FRAME_INTERVAL_MS)) return;
+      lastIntroFrameMs = frameMs;
+    } else {
+      if (lastLiveFrameMs !== null) {
+        const nextPixelRatio = adaptivePixelRatio.observe(frameMs - lastLiveFrameMs);
+        if (nextPixelRatio !== null) renderer.setPixelRatio(nextPixelRatio);
+      }
+      lastLiveFrameMs = frameMs;
+    }
+    const rawDt = fixedStep !== null ? fixedStep : clock.getDelta();
+    const dt = fixedStep !== null ? fixedStep : Math.min(rawDt, 0.05);
+    const stationRuntimeDt = fixedStep !== null
+      ? fixedStep
+      : lastStationRuntimeFrameMs === null
+        ? 0 : Math.max(0, (frameMs - lastStationRuntimeFrameMs) / 1000);
+    lastStationRuntimeFrameMs = frameMs;
+    stationRuntimeTime += stationRuntimeDt;
     if (mode === "tour") {
       tourTime = Math.min(tourTime + dt, timeline.duration);
       worldTime = tourTime;
@@ -857,7 +918,8 @@ async function main() {
     updateWorldTargetFeedback();
     /* the calf's live position drives both rigs' shutter bursts */
     env.update(worldTime, roam.subject);
-    stations.update(worldTime, roam.subject);
+    stations.update(
+      worldTime, roam.subject, mode === "tour" ? worldTime : stationRuntimeTime);
     pipelineCarry.update(dt, worldTime, roam.subject, roam.heading);
     stepScrubber.update();   // playhead/label track the player's virtual clock
     /* after the camera for this frame is final, before anything is drawn */
@@ -865,7 +927,18 @@ async function main() {
     renderer.render(scene, camera);
     css2d.render(scene, camera);
   }
-  renderLifecycle = createRenderLifecycle({ renderer, frame: renderFrame });
+  renderLifecycle = createRenderLifecycle({
+    renderer,
+    frame: renderFrame,
+    /* Hidden pages are paused by renderLifecycle. Restart both sampling
+       baselines on resume so neither adaptive DPR nor the Step 08 presentation
+       clock consumes the background-tab gap as one giant frame. */
+    onResume: () => {
+      lastLiveFrameMs = null;
+      lastStationRuntimeFrameMs = null;
+      clock.getDelta();
+    }
+  });
   if (unloading) renderLifecycle.dispose();
 
   window.__world = {
@@ -887,7 +960,15 @@ async function main() {
       worldTime = tourTime;
       applyTour(tourTime);
     },
-    setFixedStep(dtOrNull) { fixedStep = dtOrNull; },
+    setFixedStep(dtOrNull) {
+      fixedStep = dtOrNull;
+      const ratio = adaptivePixelRatio.setEnabled(!TOUR && fixedStep === null, {
+        resetRatio: fixedStep !== null
+      });
+      if (ratio !== null) renderer.setPixelRatio(ratio);
+      lastLiveFrameMs = null;
+      lastStationRuntimeFrameMs = null;
+    },
     get mode() { return mode; },
     get station() { return mode === "dwell" ? lastStation : active; },
     get worldTime() { return worldTime; },
@@ -895,8 +976,21 @@ async function main() {
     get rendering() { return renderLifecycle.isRunning; },
     get renderInfo() {
       const r = renderer.info.render;
-      return { calls: r.calls, triangles: r.triangles, points: r.points, programs: renderer.info.programs.length };
+      const memory = renderer.info.memory;
+      return {
+        frame: r.frame,
+        calls: r.calls,
+        triangles: r.triangles,
+        points: r.points,
+        lines: r.lines,
+        programs: renderer.info.programs.length,
+        geometries: memory.geometries,
+        textures: memory.textures,
+        pixelRatio: renderer.getPixelRatio(),
+        drawingBuffer: [renderer.domElement.width, renderer.domElement.height]
+      };
     },
+    get frameBudget() { return { ...adaptivePixelRatio.stats }; },
     get camDistance() { return camera.position.distanceTo(controls.target); },
     get camPos() { return camera.position.toArray(); },
     get camTarget() { return controls.target.toArray(); },
@@ -1099,18 +1193,16 @@ async function main() {
     }
     worldEntered = true;
     pendingEntryToast = destination;
+    document.body.classList.add("world-entered");
+    adaptivePixelRatio.resetWindow();
+    lastLiveFrameMs = null;
+    lastStationRuntimeFrameMs = null;
     document.activeElement?.blur?.(); // keep movement keys flowing to the world
     introEl.classList.add("hidden");
     renderLifecycle.start();
-    /* Both routes reach stations 01-03 early, and their case-view textures are
-       the other half of the first-arrival stall. Start them here, during the
-       fly-down, so the decodes are done before anyone walks under the gantry.
-       startStationTextures already paces its own queue and is idempotent. */
-    if ("requestIdleCallback" in window) {
-      requestIdleCallback(() => startStationTextures(), { timeout: 2500 });
-    } else {
-      setTimeout(startStationTextures, 700);
-    }
+    /* READY already waits for the first local photo decode/upload pass. This
+       idempotent call only retries a source that was temporarily unavailable. */
+    startStationTextures(renderer);
     if (destination === "overview") {
       /* EXPLORE FREELY means the paper map, not an involuntary mode switch.
          The primary CALF-GUIDED route keeps the automatic entrance. */
@@ -1296,6 +1388,14 @@ async function main() {
   }
 
   /* ---- ready ---- */
+  /* Decode and upload the six Case 001 display textures behind the loading
+     screen. They total only ~334 KB, but each expands to a full image in GPU
+     memory; paying that work here prevents a dark board or upload hitch when a
+     fast visitor first walks into Capture / Segment. Missing files fail soft
+     and can be retried when the world is entered. */
+  showStatus(`PRELOADING CASE 001 PHOTOS ${loadStamp}`);
+  await startStationTextures(renderer);
+
   /* Pay the station-light shader compiles here, where a stall is expected and
      hidden, instead of in the first frame the visitor reaches an exhibit.
      Focusing a station changes how many spots are lit, and three.js caches

@@ -20,7 +20,7 @@ import * as THREE from "../../vendor/three.module.js";
 
 /* one 64² radial ramp behind every glow card in the world */
 let glowTex = null;
-function flashTexture() {
+export function cameraFlashTexture() {
   if (glowTex) return glowTex;
   const c = document.createElement("canvas");
   c.width = c.height = 64;
@@ -59,7 +59,7 @@ export function createCameraFlash({
   /* One SpriteMaterial for the whole rig: the cameras always fire together, so
      they always share an opacity, and sprites already share the ramp texture. */
   const glowMat = new THREE.SpriteMaterial({
-    map: flashTexture(),
+    map: cameraFlashTexture(),
     blending: THREE.AdditiveBlending,
     transparent: true, depthWrite: false, opacity: 0, fog: false
   });

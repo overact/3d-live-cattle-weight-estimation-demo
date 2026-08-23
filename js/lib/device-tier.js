@@ -15,6 +15,7 @@
    perceived sharpness than the number suggests, because the panel's physical
    pixels are tiny. */
 const PIXEL_RATIO_CAP = { low: 1.5, mid: 1.75, high: 2 };
+const PIXEL_RATIO_FLOOR = { low: 0.8, mid: 1, high: 1 };
 
 /* Gaussians per latent voxel to DRAW at each tier. null = draw whatever the
    trace carries. These only bite once a dense trace is exported; against the
@@ -52,6 +53,15 @@ export function planQuality(signals = {}) {
   return {
     tier,
     pixelRatio: Math.min(devicePixelRatio, PIXEL_RATIO_CAP[tier]),
+    /* Static signals choose the ceiling; sustained frame time chooses where the
+       live renderer sits below it. Never supersample a 1x display, and keep the
+       floor explicit so a slow high-DPR device can shed fill-rate without
+       silently turning the world into a permanently blurry canvas. */
+    pixelRatioFloor: Math.min(
+      devicePixelRatio,
+      PIXEL_RATIO_CAP[tier],
+      PIXEL_RATIO_FLOOR[tier]
+    ),
     /* MSAA multiplies the very fragment work the pixel-ratio cap is trying to
        reduce, so the weakest tier trades edge quality for frame rate. */
     antialias: tier !== "low",
@@ -63,6 +73,131 @@ export function planQuality(signals = {}) {
        device, but the request rides along here so callers read one object. */
     reducedMotion
   };
+}
+
+/* Runtime fill-rate governor. The hardware hints above are necessarily coarse:
+   a phone may have a fast GPU, while a Retina laptop can be thermally limited.
+   This pure state machine reacts only after a sustained window, changes one
+   small DPR step at a time, and waits much longer before restoring quality.
+   `observe()` returns a new ratio only when the renderer needs reallocation. */
+export class AdaptivePixelRatio {
+  constructor({
+    maxPixelRatio = 1,
+    minPixelRatio = 1,
+    enabled = true,
+    /* RAF cadence includes the display refresh cap. Treating 30/40 Hz as GPU
+       overload would lower resolution without buying a single extra frame, so
+       only sustained sub-25-fps delivery steps down. Conversely, 16.67 ms is a
+       healthy 60 Hz frame and must be allowed to restore quality. */
+    slowFrameMs = 40,
+    fastFrameMs = 17.5,
+    slowWindowMs = 1400,
+    fastWindowMs = 6000,
+    cooldownMs = 1800,
+    downStep = 0.25,
+    upStep = 0.125,
+    smoothing = 0.08
+  } = {}) {
+    this.maxPixelRatio = Math.max(0.5, maxPixelRatio);
+    this.minPixelRatio = Math.min(
+      this.maxPixelRatio,
+      Math.max(0.5, minPixelRatio)
+    );
+    this.currentPixelRatio = this.maxPixelRatio;
+    this.enabled = enabled && this.maxPixelRatio > this.minPixelRatio;
+    this.slowFrameMs = slowFrameMs;
+    this.fastFrameMs = Math.min(fastFrameMs, slowFrameMs);
+    this.slowWindowMs = slowWindowMs;
+    this.fastWindowMs = fastWindowMs;
+    this.cooldownDurationMs = cooldownMs;
+    this.downStep = downStep;
+    this.upStep = upStep;
+    this.smoothing = smoothing;
+    this.changes = 0;
+    this.resetWindow();
+  }
+
+  resetWindow() {
+    this.ewmaFrameMs = null;
+    this.slowAccumMs = 0;
+    this.fastAccumMs = 0;
+    this.cooldownMs = 0;
+    this.longFrameStreak = 0;
+  }
+
+  setEnabled(on, { resetRatio = false } = {}) {
+    this.enabled = !!on && this.maxPixelRatio > this.minPixelRatio;
+    this.resetWindow();
+    if (!resetRatio || this.currentPixelRatio === this.maxPixelRatio) return null;
+    this.currentPixelRatio = this.maxPixelRatio;
+    return this.currentPixelRatio;
+  }
+
+  observe(frameMs) {
+    /* Ignore tab restores, debugger pauses and first-load stalls: reducing the
+       drawing buffer cannot repair a one-off 500 ms network/decode pause. Two
+       consecutive long frames, however, are a genuine very-slow renderer and
+       must be allowed to downshift instead of getting ignored forever. */
+    if (!this.enabled || !Number.isFinite(frameMs) || frameMs <= 0 || frameMs > 1000) {
+      return null;
+    }
+    if (frameMs > 250) {
+      this.longFrameStreak += 1;
+      if (this.longFrameStreak < 2) return null;
+    } else {
+      this.longFrameStreak = 0;
+    }
+    const sampleMs = Math.min(frameMs, 100);
+
+    this.ewmaFrameMs = this.ewmaFrameMs === null
+      ? sampleMs
+      : this.ewmaFrameMs + (sampleMs - this.ewmaFrameMs) * this.smoothing;
+
+    if (this.cooldownMs > 0) {
+      this.cooldownMs = Math.max(0, this.cooldownMs - sampleMs);
+      return null;
+    }
+
+    if (this.ewmaFrameMs > this.slowFrameMs) {
+      this.slowAccumMs += sampleMs;
+      this.fastAccumMs = 0;
+    } else if (this.ewmaFrameMs < this.fastFrameMs) {
+      this.fastAccumMs += sampleMs;
+      this.slowAccumMs = Math.max(0, this.slowAccumMs - sampleMs * 0.5);
+    } else {
+      this.slowAccumMs = Math.max(0, this.slowAccumMs - sampleMs * 0.25);
+      this.fastAccumMs = Math.max(0, this.fastAccumMs - sampleMs * 0.5);
+    }
+
+    let next = null;
+    if (this.slowAccumMs >= this.slowWindowMs &&
+        this.currentPixelRatio > this.minPixelRatio) {
+      next = Math.max(this.minPixelRatio, this.currentPixelRatio - this.downStep);
+    } else if (this.fastAccumMs >= this.fastWindowMs &&
+               this.currentPixelRatio < this.maxPixelRatio) {
+      next = Math.min(this.maxPixelRatio, this.currentPixelRatio + this.upStep);
+    }
+
+    if (next === null || Math.abs(next - this.currentPixelRatio) < 1e-6) return null;
+    this.currentPixelRatio = next;
+    this.slowAccumMs = 0;
+    this.fastAccumMs = 0;
+    this.cooldownMs = this.cooldownDurationMs;
+    this.changes += 1;
+    return next;
+  }
+
+  get stats() {
+    return {
+      enabled: this.enabled,
+      currentPixelRatio: this.currentPixelRatio,
+      minPixelRatio: this.minPixelRatio,
+      maxPixelRatio: this.maxPixelRatio,
+      ewmaFrameMs: this.ewmaFrameMs,
+      changes: this.changes,
+      cooldownMs: this.cooldownMs
+    };
+  }
 }
 
 export function readDeviceSignals(view = globalThis) {

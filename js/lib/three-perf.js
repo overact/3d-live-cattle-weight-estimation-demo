@@ -147,15 +147,18 @@ export function instanceTemplate(template, placements, groundFn = () => 0) {
    object hovering at the threshold from flickering: it must grow noticeably
    past the show point before coming back.
 
-   Objects are hidden, not swapped for a stand-in, because at the sizes this
-   triggers at the object is a few dozen pixels deep in fog. Anything kept
-   with keep() is exempt — use it for whatever the visitor is looking at, so
-   this can never blank the exhibit in front of them. */
+   Entries may provide a cheap point proxy. In that case the proxy remains as a
+   stable silhouette while the full surface becomes visible underneath it, then
+   fades away across the hysteresis band. This avoids the conspicuous whole-cow
+   pop that a binary visibility gate causes during free-roam approaches.
+
+   Anything kept with keep() is exempt — use it for whatever the visitor is
+   looking at, so this can never blank the exhibit in front of them. */
 export class ScreenSizeLod {
   constructor({ minFraction = 0.04, hysteresis = 1.4 } = {}) {
     this.minFraction = minFraction;
     this.hysteresis = hysteresis;
-    this.entries = [];          // {object, key, centre, radius, shown}
+    this.entries = [];          // {object, proxy, details, key, centre, radius, shown}
     this.kept = new Set();
     this.enabled = true;
     this._box = new THREE.Box3();
@@ -166,12 +169,26 @@ export class ScreenSizeLod {
   /* Measure now, in world space: these models are mounted once and do not
      move afterwards, so re-deriving a bounding sphere every frame would be
      pure waste. Call again if a model is ever re-parented or re-scaled. */
-  add(key, object) {
+  add(key, object, { proxy = null, details = [] } = {}) {
     this._box.setFromObject(object);
     if (this._box.isEmpty()) return null;
     this._box.getBoundingSphere(this._sphere);
+    const proxyMaterials = [];
+    const seenMaterials = new Set();
+    proxy?.traverse((o) => {
+      const materials = Array.isArray(o.material) ? o.material : [o.material];
+      for (const material of materials) {
+        if (!material || seenMaterials.has(material) || material.opacity === undefined) continue;
+        seenMaterials.add(material);
+        proxyMaterials.push({
+          material,
+          opacity: Number.isFinite(material.userData.lodBaseOpacity)
+            ? material.userData.lodBaseOpacity : material.opacity
+        });
+      }
+    });
     const entry = {
-      key, object,
+      key, object, proxy, details, proxyMaterials,
       centre: this._sphere.center.clone(),
       radius: this._sphere.radius,
       shown: object.visible
@@ -185,10 +202,35 @@ export class ScreenSizeLod {
     this.kept = new Set(keys.filter((k) => k !== null && k !== undefined));
   }
 
+  _setFull(entry, on) {
+    if (entry.proxy && entry.details.length) {
+      /* Keep the transform root alive: the proxy is a sibling with the same
+         mount transform, while only the expensive leaf meshes are gated. */
+      entry.object.visible = true;
+      for (const detail of entry.details) detail.visible = on;
+    } else {
+      entry.object.visible = on;
+    }
+  }
+
+  _setProxy(entry, on, alpha = 1) {
+    if (!entry.proxy) return;
+    entry.proxy.visible = on;
+    const opacityScale = Number.isFinite(entry.proxy.userData.opacityScale)
+      ? entry.proxy.userData.opacityScale : 1;
+    for (const { material, opacity } of entry.proxyMaterials) {
+      material.opacity = opacity * opacityScale * alpha;
+    }
+  }
+
   setEnabled(on) {
     this.enabled = !!on;
     if (!on) {
-      for (const e of this.entries) { e.object.visible = true; e.shown = true; }
+      for (const e of this.entries) {
+        this._setFull(e, true);
+        this._setProxy(e, false);
+        e.shown = true;
+      }
     }
   }
 
@@ -198,17 +240,42 @@ export class ScreenSizeLod {
     const tan = Math.tan(halfFov);
     let hidden = 0;
     for (const e of this.entries) {
-      if (this.kept.has(e.key)) {
-        e.object.visible = true;
-        e.shown = true;
-        continue;
-      }
       const d = camera.position.distanceTo(e.centre);
       const fraction = e.radius / Math.max(d * tan, 1e-6);
+      e.fraction = fraction;
+      if (this.kept.has(e.key)) {
+        /* Step 05's low tier may deliberately proxy one comparison model even
+           while focused. Let that exhibit own its leaf visibility for the
+           frame; every other kept model is forced to full detail. */
+        const focusProxyActive = !!e.proxy?.userData.focusProxyActive;
+        if (focusProxyActive) {
+          e.object.visible = true;
+        } else {
+          this._setFull(e, true);
+          this._setProxy(e, false);
+        }
+        e.shown = true;
+        e.transition = 1;
+        continue;
+      }
+      if (e.proxy) {
+        /* Full geometry starts at the old hide threshold. The point proxy then
+           fades over the hysteresis interval, masking GPU detail activation in
+           both approach directions without keeping triangles alive at range. */
+        const fadeEnd = this.minFraction * this.hysteresis;
+        const blend = THREE.MathUtils.smoothstep(fraction, this.minFraction, fadeEnd);
+        e.shown = fraction >= this.minFraction;
+        e.transition = blend;
+        this._setFull(e, e.shown);
+        this._setProxy(e, blend < 0.999, 1 - blend);
+        if (!e.shown) hidden++;
+        continue;
+      }
       /* asymmetric thresholds: cheap to keep hiding, dearer to come back */
       const limit = e.shown ? this.minFraction : this.minFraction * this.hysteresis;
       e.shown = fraction >= limit;
       e.object.visible = e.shown;
+      e.transition = e.shown ? 1 : 0;
       if (!e.shown) hidden++;
     }
     return hidden;
@@ -218,7 +285,15 @@ export class ScreenSizeLod {
     return {
       total: this.entries.length,
       hidden: this.entries.filter((e) => !e.shown).length,
-      kept: [...this.kept]
+      kept: [...this.kept],
+      entries: this.entries.map((e) => ({
+        key: e.key,
+        shown: e.shown,
+        fraction: e.fraction ?? null,
+        proxy: !!e.proxy,
+        transition: e.transition ?? null,
+        kept: this.kept.has(e.key)
+      }))
     };
   }
 }

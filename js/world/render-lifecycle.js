@@ -1,4 +1,6 @@
-export function createRenderLifecycle({ renderer, frame, documentRef = document }) {
+export function createRenderLifecycle({
+  renderer, frame, documentRef = document, onResume = null
+}) {
   let wantsRendering = false;
   let rendering = false;
   let suspended = false;
@@ -7,6 +9,7 @@ export function createRenderLifecycle({ renderer, frame, documentRef = document 
   function sync() {
     const nextRendering = wantsRendering && !suspended && !disposed && !documentRef.hidden;
     if (nextRendering === rendering) return;
+    if (nextRendering) onResume?.();
     renderer.setAnimationLoop(nextRendering ? frame : null);
     rendering = nextRendering;
   }

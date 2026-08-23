@@ -18,6 +18,20 @@ for (const page of forbiddenPages) {
   if (fs.existsSync(path.join(root, page))) throw new Error(`Forbidden public page present: ${page}`);
 }
 
+for (const page of requiredPages) {
+  const html = fs.readFileSync(path.join(root, page), "utf8");
+  for (const destination of requiredPages) {
+    if (!html.includes(`href="${destination}"`)) {
+      throw new Error(`${page} navigation is missing ${destination}`);
+    }
+  }
+  for (const forbidden of forbiddenPages) {
+    if (html.includes(`href="${forbidden}"`)) {
+      throw new Error(`${page} navigation leaks forbidden page ${forbidden}`);
+    }
+  }
+}
+
 const textFiles = [];
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -63,6 +77,28 @@ for (const full of textFiles.filter((file) => /\.(?:js|mjs)$/.test(file))) {
     if (!specifier.startsWith(".")) continue;
     const resolved = path.normalize(path.relative(root, path.resolve(path.dirname(full), specifier)));
     localRefs.add(resolved);
+  }
+}
+
+/* A static browser treats `module.js` and `module.js?v=...` as different
+   modules. Reject split query graphs so singleton caches and lifecycle state
+   cannot be instantiated twice or revived from mismatched browser caches. */
+const moduleQueries = new Map();
+for (const full of textFiles.filter((file) => /\.(?:js|mjs)$/.test(file))) {
+  const source = fs.readFileSync(full, "utf8");
+  for (const match of source.matchAll(/\bfrom\s+["']([^"']+)["']/g)) {
+    const specifier = match[1];
+    if (!specifier.startsWith(".")) continue;
+    const [bare, query = "<unversioned>"] = specifier.split("?", 2);
+    const target = path.normalize(path.relative(root, path.resolve(path.dirname(full), bare)));
+    const queries = moduleQueries.get(target) || new Set();
+    queries.add(query);
+    moduleQueries.set(target, queries);
+  }
+}
+for (const [target, queries] of moduleQueries) {
+  if (queries.size > 1) {
+    throw new Error(`Module query split for ${target}: ${[...queries].join(", ")}`);
   }
 }
 
@@ -151,10 +187,49 @@ if (!worldMain.includes('if (key === "rgbd" && o.isPoints)') ||
 }
 
 const worldCarry = fs.readFileSync(path.join(root, "js/world/pipeline-carry.js"), "utf8");
+const worldStations = fs.readFileSync(path.join(root, "js/world/stations.js"), "utf8");
+const deploymentSim = fs.readFileSync(path.join(root, "js/world/deployment-sim.js"), "utf8");
+const renderLifecycle = fs.readFileSync(path.join(root, "js/world/render-lifecycle.js"), "utf8");
+const deviceTier = fs.readFileSync(path.join(root, "js/lib/device-tier.js"), "utf8");
+const threePerf = fs.readFileSync(path.join(root, "js/lib/three-perf.js"), "utf8");
 const mainStationsVersion = worldMain.match(/from "\.\/stations\.js\?v=([^"]+)"/)?.[1];
 const carryStationsVersion = worldCarry.match(/from "\.\/stations\.js\?v=([^"]+)"/)?.[1];
 if (!mainStationsVersion || mainStationsVersion !== carryStationsVersion) {
   throw new Error("World modules do not share one versioned stations.js instance");
+}
+
+/* Keep the public export on the verified open-world runtime rather than only
+   checking that its files exist. These markers cover the device/performance
+   policy, Station 05 turntable, and Station 08's low-FPS-safe lifecycle. */
+const ranchHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+if (!ranchHtml.includes('<button class="station-chip hud-mono ui"') ||
+    !worldMain.includes("let stationRuntimeTime = 0") ||
+    !worldMain.includes("frameMs - lastStationRuntimeFrameMs") ||
+    !worldMain.includes("onResume: () =>") ||
+    !worldMain.includes('render-lifecycle.js?v=20260823-step05-turntable-step08-reliable') ||
+    !renderLifecycle.includes("onResume?.()") ||
+    !deviceTier.includes("export class AdaptivePixelRatio") ||
+    !threePerf.includes("export class ScreenSizeLod")) {
+  throw new Error("Public ranch is missing the responsive, low-FPS-safe runtime contract");
+}
+if (!worldStations.includes("turntableSpeed = 0.20") ||
+    !worldStations.includes("COMPARE_SAFE_FRAME_X = -2.6") ||
+    !worldStations.includes("synchronized: true") ||
+    !worldStations.includes("completingCycle = true") ||
+    !worldStations.includes("isFinishing: !isActive && completingCycle") ||
+    !deploymentSim.includes("deploymentReducedMotionStateAt") ||
+    worldStations.includes("RESTART")) {
+  throw new Error("Public Station 05/08 lifecycle contract is incomplete");
+}
+
+const deploymentRuntime = await import(
+  `data:text/javascript;base64,${Buffer.from(deploymentSim).toString("base64")}`);
+if (deploymentRuntime.deploymentStateAt(15).cycleIndex !== 1 ||
+    deploymentRuntime.deploymentStateAt(8).phase !== "reconstruct" ||
+    deploymentRuntime.deploymentReducedMotionStateAt(0).phase !== "capture" ||
+    !deploymentRuntime.deploymentReducedMotionStateAt(30).weightReady ||
+    deploymentRuntime.deploymentReducedMotionStateAt(1).activeFlash !== -1) {
+  throw new Error("Public Station 08 deployment semantics failed executable checks");
 }
 
 const bytes = fs.readdirSync(root).reduce((sum, name) => sum + sizeOf(path.join(root, name)), 0);

@@ -5,15 +5,15 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { clone as cloneSkinned } from "../../vendor/SkeletonUtils.js";
-import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
-import { instanceTemplate } from "../lib/three-perf.js";
+import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
+import { instanceTemplate } from "../lib/three-perf.js?v=20260823-proxy-lod";
 import { createBlobShadow } from "../lib/blob-shadow.js";
 import { createColliderSet } from "../lib/obb-collider.js";
-import { createCameraFlash } from "../lib/camera-flash.js";
+import { createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-turntable-step08-reliable";
 
 const AMBER = 0xe39b2d, ICE = 0x86d7ea;
 /* early dawn: deep-blue zenith, warm bright horizon, lifted fog */
-const FOG = 0x465062;
+const FOG = 0x3b4658;
 const TAU = Math.PI * 2;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 
@@ -25,15 +25,6 @@ export const FUTURE_RIG_CAPTURE_POINTS = Object.freeze([
   Object.freeze({ id: "right", x: -40, y: 2.45, z: 4.56 }),
   Object.freeze({ id: "top",   x: -40, y: 3.02, z: 2.0 })
 ]);
-export const FUTURE_RIG_PROXIMITY = Object.freeze({
-  x: -40, z: 2, radius: 2.8
-});
-/* The visible deployment line is north of the physical weigh gate. A separate
-   trigger lets a roaming calf start the machinery by approaching what the
-   visitor can actually see, rather than an invisible point 12 units south. */
-export const FUTURE_FACTORY_PROXIMITY = Object.freeze({
-  x: -40, z: 14, radius: 5.2
-});
 
 /* ---------- herd gait: clip phase from distance, not wall-clock ----------
    A leg cycle ticking at a fixed rate while the body eases through a turn is
@@ -296,7 +287,7 @@ function buildTerrain() {
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
-  const cA = new THREE.Color(0x2d4030), cB = new THREE.Color(0x4d5e41);
+  const cA = new THREE.Color(0x25382c), cB = new THREE.Color(0x465a3d);
   const tmp = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
@@ -330,7 +321,11 @@ function buildSky() {
     vertexShader: /* glsl */ `
       varying vec3 vDir;
       void main() {
-        vDir = normalize(position);
+        /* The camera roams far from the dome origin. Object-space position
+           made the dawn band crawl upward and even appear along the top edge in
+           overview views. Use the real world-space view ray instead. */
+        vec3 worldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+        vDir = normalize(worldPosition - cameraPosition);
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
@@ -338,8 +333,8 @@ function buildSky() {
       uniform vec3 uSunDir;
       varying vec3 vDir;
       void main() {
-        vec3 zenith = vec3(0.10, 0.16, 0.30);             // deep dawn blue
-        vec3 horizon = vec3(0.60, 0.46, 0.30);            // warm bright band
+        vec3 zenith = vec3(0.055, 0.09, 0.17);            // deep dawn blue
+        vec3 horizon = vec3(0.47, 0.36, 0.27);            // warm haze band
         vec3 amber = vec3(0.95, 0.66, 0.26);
         float hz = pow(1.0 - clamp(vDir.y, 0.0, 1.0), 2.6);
         vec3 col = mix(zenith, horizon, hz);
@@ -352,6 +347,51 @@ function buildSky() {
     `
   });
   return new THREE.Mesh(geo, mat);
+}
+
+/* One low-poly silhouette gives the flat fog line a sense of place without a
+   texture, shadow map or post-process pass. It is a single static draw call and
+   fades through the scene fog, so close exhibits stay the visual priority. */
+function buildDistantRidge() {
+  const segments = 72;
+  const positions = new Float32Array((segments + 1) * 2 * 3);
+  const colors = new Float32Array((segments + 1) * 2 * 3);
+  const indices = [];
+  const low = new THREE.Color(0x202b31);
+  const high = new THREE.Color(0x34414a);
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * TAU;
+    const ripple = hash2(i % segments, 211);
+    const radius = 118 + (ripple - 0.5) * 8;
+    const ridgeY = 5.5 + ripple * 7.5 +
+      Math.sin(a * 3 + 0.8) * 2.2 + Math.sin(a * 7 - 0.4) * 1.3;
+    const x = Math.cos(a) * radius;
+    const z = Math.sin(a) * radius;
+    const base = i * 6;
+    positions[base] = x;
+    positions[base + 1] = -4;
+    positions[base + 2] = z;
+    positions[base + 3] = x;
+    positions[base + 4] = ridgeY;
+    positions[base + 5] = z;
+    colors.set(low.toArray(), base);
+    colors.set(high.toArray(), base + 3);
+    if (i < segments) {
+      const j = i * 2;
+      indices.push(j, j + 1, j + 2, j + 1, j + 3, j + 2);
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geo.setIndex(indices);
+  geo.computeBoundingSphere();
+  const ridge = new THREE.Mesh(
+    geo,
+    new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide })
+  );
+  ridge.name = "distant-ridge";
+  return ridge;
 }
 
 /* ---------- instanced grass + drifting fireflies ---------- */
@@ -573,14 +613,15 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
   scene.background = new THREE.Color(FOG);
   scene.fog = new THREE.Fog(FOG, 48, 165);
 
-  /* dawn lights: warm key at ~15° + generous cool-blue sky fill */
-  const key = new THREE.DirectionalLight(0xf2b458, 4.0);
+  /* dawn lights: warm key at ~15° + restrained cool-blue sky fill */
+  const key = new THREE.DirectionalLight(0xf2b458, 3.7);
   key.position.copy(SUN_DIR).multiplyScalar(110);
   scene.add(key, key.target);
-  scene.add(new THREE.HemisphereLight(0xbcd7e8, 0x33402e, 1.35));
-  scene.add(new THREE.AmbientLight(0x46505e, 0.85));
+  scene.add(new THREE.HemisphereLight(0xbcd7e8, 0x2d3a30, 1.18));
+  scene.add(new THREE.AmbientLight(0x46505e, 0.62));
 
   scene.add(buildSky());
+  scene.add(buildDistantRidge());
   scene.add(buildTerrain());
   scene.add(buildGrass());
   const fireflies = buildFireflies();

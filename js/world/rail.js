@@ -35,7 +35,10 @@ export const STATIONS = [
   { id: "weigh",       num: "07", name: "WEIGH",       pos: V(-18, 0, -22), look: V(-18, 2.6, -22), cam: V(-7.2, 5.2, -30.1), dwell: 11 },
   /* The walk target stays east of the paddock. The northbound deployment line
      sits beyond the north fence; look/cam frame it from its clear east side. */
-  { id: "future",      num: "08", name: "FUTURE",      pos: V(-28, 0, 14), look: V(-40, 2.1, 14), cam: V(-27.5, 5.0, 14), dwell: 10 }
+  /* Pull the arrival pose in modestly and bias it toward the south/capture end.
+     The factory line reads larger while the right-side reader panel is open,
+     and the three-camera scanner remains inside the unobstructed safe frame. */
+  { id: "future",      num: "08", name: "FUTURE",      pos: V(-28, 0, 14), look: V(-40, 2.1, 13), cam: V(-29.0, 4.7, 13), dwell: 15 }
 ];
 
 /* Keep the ranch readable behind the opening guide and give free-explore a
@@ -45,7 +48,10 @@ export const STATIONS = [
    Height rather than distance does the widening on purpose: the fog reaches
    full strength at 165 u, so backing the camera off instead would have washed
    the whole ranch grey. */
-export const OVERVIEW = { pos: V(2, 68, 62), target: V(-9, 0, 2) };
+/* About 7% closer than the original overview. Keep the same centroid and
+   viewing angle so the default composition grows without wide-angle stretch,
+   while Steps 00 and 03 retain a usable screen-edge safety margin. */
+export const OVERVIEW = { pos: V(1.23, 63.24, 57.8), target: V(-9, 0, 2) };
 
 /* Curve through dwell cameras with lifted flyover waypoints between. */
 const railPts = [];

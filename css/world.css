@@ -27,6 +27,28 @@ html, body {
   letter-spacing: 0.08em;
 }
 
+/* Keep onboarding poster-like: the ranch itself stays alive behind the intro,
+   while operational chrome appears only after the visitor picks a route. */
+body:not(.world-entered) :is(
+  .labels, .station-chip, .carry-status, .dock, .hint,
+  .research-guide, .entry-toast, #stationPanel, .travel-caption
+) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* The world uses ice for navigation/state and amber for the evidence route. */
+body .global-nav__link--current {
+  color: var(--night);
+  background: var(--ice);
+  border-color: var(--ice);
+}
+body .global-nav__link--current:hover,
+body .global-nav__link--current:focus-visible {
+  color: var(--night);
+  border-color: var(--ice);
+}
+
 /* ---------- canvas + CSS2D layer ---------- */
 
 #worldWrap { position: fixed; inset: 0; }
@@ -58,11 +80,17 @@ html, body {
   pointer-events: auto;         /* clickable: rail-travels to the station */
   cursor: pointer;
   transition: border-color 0.18s, background 0.18s, opacity 0.18s, transform 0.18s;
+  font-family: inherit;
+  appearance: none;
 }
 
 .station-marker:hover {
   border-color: var(--amber);
   background: rgba(20, 16, 8, 0.8);
+}
+.station-marker:focus-visible {
+  outline: 2px solid var(--ice);
+  outline-offset: 3px;
 }
 
 /* Canvas raycast feedback mirrors DOM-marker hover. Avoid transform here:
@@ -524,8 +552,11 @@ html, body {
   padding: 0.4rem 0.85rem;
   opacity: 0;
   transition: opacity 0.4s;
+  cursor: pointer;
 }
 .station-chip.show { opacity: 1; }
+.station-chip:focus-visible { outline: 2px solid var(--ice); outline-offset: 3px; }
+.station-chip[aria-expanded="true"] { border-color: rgba(134, 215, 234, 0.46); }
 
 .dock {
   position: fixed;
@@ -607,6 +638,23 @@ html, body {
 }
 
 #stationPanel.open { transform: translateX(0); }
+
+.panel-close {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  float: right;
+  width: 2rem;
+  height: 2rem;
+  margin: -0.35rem -0.35rem 0.25rem 0.5rem;
+  border: 1px solid rgba(232, 228, 218, 0.22);
+  border-radius: 50%;
+  color: var(--dim);
+  background: rgba(9, 12, 16, 0.78);
+  cursor: pointer;
+}
+.panel-close:hover { color: var(--paper); border-color: var(--ice); }
+.panel-close:focus-visible { outline: 2px solid var(--ice); outline-offset: 2px; }
 
 .panel-kicker { font-size: 0.62rem; color: var(--ice); margin-bottom: 0.55rem; }
 
@@ -843,28 +891,58 @@ body.tour #stationPanel { display: none !important; }
 }
 
 @media (max-width: 640px) {
+  body .global-nav--overlay {
+    top: 8px;
+    width: calc(100vw - 16px);
+    max-width: none;
+    flex-wrap: nowrap;
+    gap: 0.15rem;
+    padding: 0.12rem 0.28rem;
+  }
+  body .global-nav--overlay .global-nav__brand { display: none; }
+  body .global-nav--overlay .global-nav__link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    min-height: 2.75rem;
+    padding: 0.3rem 0.18rem;
+    text-align: center;
+    font-size: clamp(0.56rem, 2.25vw, 0.62rem);
+  }
+
   #intro {
     align-items: flex-start;
     overflow-y: auto;
-    padding: 7.5rem 1.15rem 1.2rem;
+    padding: 4.8rem 1.15rem 1.2rem;
     background:
       linear-gradient(0deg, rgba(6, 9, 12, 0.98) 0%, rgba(6, 9, 12, 0.84) 54%, rgba(6, 9, 12, 0.16) 100%);
   }
   .intro-copy { width: 100%; }
-  #intro h1 { font-size: clamp(2.5rem, 15vw, 4rem); margin-bottom: 0.65rem; }
+  #intro h1 {
+    max-width: 100%;
+    font-size: clamp(2.35rem, 12.5vw, 3.2rem);
+    letter-spacing: 0;
+    margin-bottom: 0.65rem;
+  }
   .intro-paper-title { font-size: 0.92rem; }
   .intro-authors { font-size: 0.68rem; margin-bottom: 0.65rem; }
   .intro-sub { font-size: 0.8rem; line-height: 1.45; margin-bottom: 0.55rem; }
   .intro-evidence { font-size: 0.62rem; margin-bottom: 0.35rem; }
   #introStatus { min-height: 1.3rem; font-size: 0.56rem; }
   .intro-actions { width: 100%; gap: 0.5rem; }
-  #btnEnter, #btnExplore { flex: 1 1 auto; font-size: 0.62rem; padding: 0.72rem 0.8rem; }
+  #btnEnter, #btnExplore {
+    flex: 1 1 auto;
+    min-height: 2.75rem;
+    font-size: 0.62rem;
+    padding: 0.72rem 0.8rem;
+  }
   .intro-hint--desktop { display: none; }
   .intro-hint--touch { display: block; }
   .opening-guide__panels { min-height: 0; }
 
   .research-guide {
-    top: 160px;
+    top: 102px;
     left: 12px;
     right: 12px;
     width: auto;
@@ -873,10 +951,10 @@ body.tour #stationPanel { display: none !important; }
     background: linear-gradient(90deg, rgba(9, 12, 16, 0.82), rgba(9, 12, 16, 0.18));
   }
   .research-guide__question { font-size: 0.8rem; }
-  .research-guide__proof { font-size: 0.58rem; }
+  .research-guide__proof { display: none; }
 
   .entry-toast {
-    top: 238px;
+    top: 166px;
     left: 12px;
     width: calc(100vw - 24px);
   }
@@ -891,23 +969,26 @@ body.tour #stationPanel { display: none !important; }
     left: 0;
     bottom: 78px;
     width: 100%;
-    max-height: 38vh;
+    max-height: 32svh;
+    padding: 0.95rem 1rem 1.05rem;
     border-radius: 14px 14px 0 0;
     transform: translateY(calc(100% + 84px));
   }
   #stationPanel.open { transform: translateY(0); }
+  .panel-close { width: 2.75rem; height: 2.75rem; }
   .hint { display: none; }
-  /* the overlay nav wraps to three rows on a phone and swallowed the chip */
-  .station-chip { bottom: auto; top: 118px; }
+  /* One-line navigation leaves a stable second row for the station toggle. */
+  .station-chip { bottom: auto; top: 62px; min-height: 2rem; }
 
   /* At desktop metrics the dock is ~600px wide: on a phone #dots collapsed
      into a 9-high column that the station panel then covered completely,
      taking 🐮 — the only way in or out of roam — with it. Drop the ←/→
      (every station is one dot away) and tighten the rest into one row. */
-  .dock { gap: 0.25rem; padding: 0.4rem 0.45rem; }
+  .dock { bottom: 10px; gap: 0.18rem; padding: 0.35rem 0.38rem; }
   #btnPrev, #btnNext { display: none; }
-  #dots { display: flex; gap: 0.25rem; }
-  .dock button { min-width: 2rem; padding: 0.42rem 0.2rem; }
+  #dots { display: flex; gap: 0.12rem; }
+  .dock button { min-width: 1.8rem; min-height: 2.75rem; padding: 0.42rem 0.12rem; }
+  #btnRoam { min-width: 2.75rem; }
 
   /* roam is unplayable without a legend, and the keyboard one above is hidden
      here — give touch its own copy, parked below the chip so neither the
@@ -917,7 +998,7 @@ body.tour #stationPanel { display: none !important; }
     right: 12px;
     left: 12px;
     bottom: auto;
-    top: 156px;
+    top: 102px;
     text-align: center;
     /* one line at 390px, and opaque enough to stay legible over the bright
        pasture and the station markers it floats above */

@@ -9,7 +9,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
+import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
 import { createChibiCattle } from "../lib/chibi-cattle.js";
 import { createThirdPersonRig, turnToward } from "../lib/third-person-rig.js?v=20260812-steering";
 
@@ -468,7 +468,10 @@ export function initRoam({
      path); a sync build on first enter is the safety net. */
   let cattle = avatar || null;
   let bodyData = null;
-  let bodyBuiltBy = "pending";
+  /* The default herd GLB arrives through `avatar`; only the explicit chibi
+     fallback needs the procedural body worker. Keep the QA telemetry honest
+     instead of reporting a provided, ready rig as a worker stuck on pending. */
+  let bodyBuiltBy = avatar ? "provided-avatar" : "pending";
   if (!cattle) {
     try {
       const worker = new Worker(

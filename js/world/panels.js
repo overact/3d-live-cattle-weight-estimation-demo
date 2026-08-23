@@ -4,7 +4,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
+import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 
 /* All numbers are the paper's real results — do not edit casually. */
@@ -47,7 +47,7 @@ export const CONTENT = [
   {
     kicker: "STATION 05 · COMPARE",
     title: "Same protocol, different geometry.",
-    body: "Five geometry sources feed the same downstream stacked-ensemble and 5-fold cross-validation protocol: the dataset RGB+D point cloud, average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. The RGB+D cattle crop retains registered colors from Subject 001's full AutoAligned point cloud through an exact coordinate join. Agreement reaches R² 0.69 using RGB alone, compared with 0.65 for the depth-sensor baseline.",
+    body: "Five geometry sources rotate together for shape inspection, then feed the same downstream stacked-ensemble and 5-fold cross-validation protocol: the dataset RGB+D point cloud, average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. The RGB+D cattle crop retains registered colors from Subject 001's full AutoAligned point cloud through an exact coordinate join. Agreement reaches R² 0.69 using RGB alone, compared with 0.65 for the depth-sensor baseline.",
     chips: ["RGB+D · 99,082 POINTS · MAPE 6.77% · R² 0.65", "AVERAGE · MAPE 2.82% · R² 0.44", "ENTROPY · MAPE 2.73% · R² 0.47", "TRELLIS2 · MAPE 2.64% · R² 0.53", "AGREEMENT · MAPE 2.22% · R² 0.69"],
     figures: [{ src: "assets/figures/results/regression_MAPE.png", alt: "Dataset-level MAPE across weight-estimation models" }]
   },
@@ -74,8 +74,8 @@ export const CONTENT = [
   {
     kicker: "STATION 08 · FUTURE",
     title: "Follow the automated factory line.",
-    body: "Bring the calf close to the gantry beyond the cattle pen's north fence to start the whole factory sequence. Case 001 cards fly from the inward-facing cameras in recorded left → right → top order, ride the northbound line into reconstruction, and become the real 5,941-point 3D cow. That completed 3D result then moves into estimation before the terminal shows 480 kg—an illustrative UI value, not model inference or a Case 001 result.",
-    chips: ["NORTHBOUND FACTORY LINE", "LEFT → RIGHT → TOP", "REAL 3D MOVES TO KG"],
+    body: "Arriving at this station automatically starts the whole factory sequence—no extra calf positioning is required. Three visible shutter bursts issue the recorded Case 001 cards in left → right → top order; they ride the northbound line into reconstruction and become the real 5,941-point 3D cow. That completed 3D result moves into estimation before the terminal shows 480 kg—an illustrative UI value, not model inference or a Case 001 result. Once capture starts, that pass always finishes; the 15-second line repeats while you remain at Station 08.",
+    chips: ["15S AUTO LOOP", "LEFT → RIGHT → TOP FLASH", "REAL 3D MOVES TO KG"],
     figures: []
   }
 ];
@@ -114,13 +114,32 @@ const TRY = [
   "Compare each RGB view with the SAM 3 cutout.",
   "Scrub Stage 1 and Stage 2, then orbit the single-view reconstruction.",
   "Scrub both stages of the multi-view reconstruction and inspect the agreement evidence.",
-  "Compare reconstruction sources under the same downstream protocol.",
+  "Watch the synchronized turntable, then compare reconstruction sources under the same downstream protocol.",
   "Select a feature group to pin its normalized-space overlay.",
   "Orbit the paired bars and compare Agreement with RGB-D; these are cross-validation aggregates.",
-  "Walk the calf close to the gantry; then watch 1 LEFT → 2 RIGHT → 3 TOP fly to the line and follow the completed 3D cow into weight estimation."
+  "Watch the repeating 1 LEFT → 2 RIGHT → 3 TOP shutter handoff, then follow the completed 3D cow into weight estimation."
 ];
 
 export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
+  function setPanelOpen(on, { returnFocus = false } = {}) {
+    const focusWasInside = panelEl.contains(document.activeElement);
+    panelEl.classList.toggle("open", on);
+    panelEl.toggleAttribute("inert", !on);
+    panelEl.setAttribute("aria-hidden", String(!on));
+    chipEl.setAttribute("aria-expanded", String(on));
+    if (!on && returnFocus && focusWasInside) chipEl.focus();
+  }
+
+  const closeButtonHTML = () =>
+    `<button class="panel-close hud-mono" type="button" aria-label="Close station details">×</button>`;
+
+  function wirePanelChrome() {
+    panelEl.querySelector(".panel-close")?.addEventListener("click", () =>
+      setPanelOpen(false, { returnFocus: true }));
+  }
+
+  chipEl.addEventListener("click", () => setPanelOpen(!panelEl.classList.contains("open")));
+
   /* progress dots, with a thin connector per pipeline leg between them */
   const legLinks = [];
   const dots = STATIONS.map((s, i) => {
@@ -217,7 +236,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
         ioRow("OUT", "→", io.out.to, io.out.label) +
         `</div>`
       : "";
-    panelEl.innerHTML =
+    panelEl.innerHTML = closeButtonHTML() +
       crumbStripHTML(i) +
       `<p class="panel-kicker hud-mono">${c.kicker}</p>` +
       `<p class="panel-scope hud-mono">${SCOPE[i]}</p>` +
@@ -229,6 +248,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
       figs +
       (links ? `<div class="panel-links">${links}</div>` : "") +
       ioHTML;
+    wirePanelChrome();
     panelEl.querySelector(".crumb-strip")
       .addEventListener("click", () => onGoto(1));
     panelEl.querySelectorAll(".io-row[data-goto]").forEach((b) =>
@@ -241,14 +261,14 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
           onFamily(parseInt(b.dataset.family, 10));
         }));
     }
-    panelEl.classList.add("open");
+    setPanelOpen(true);
     chipEl.textContent = `${STATIONS[i].num} / ${TOTAL} — ${STATIONS[i].name}`;
     setDots(i);
     setLeg(i);   // every arrival path (rail, roam, tour) funnels through here
   }
 
   function hidePanel() {
-    panelEl.classList.remove("open");
+    setPanelOpen(false);
   }
 
   /* station 0 — the ranch gate dwell reuses the pipeline rows panel */
@@ -256,7 +276,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
     visited.add(0);
     refreshVisited();
     const c = CONTENT[0];
-    panelEl.innerHTML =
+    panelEl.innerHTML = closeButtonHTML() +
       `<p class="panel-kicker hud-mono">${c.kicker}</p>` +
       `<p class="panel-scope hud-mono">${SCOPE[0]}</p>` +
       `<h2>${c.title}</h2>` +
@@ -264,9 +284,10 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
       `<p class="panel-body">${c.body}</p>` +
       `<div class="pipe-rows">${pipelineRowsHTML()}</div>` +
       `<button id="btnStartTour" class="hud-mono" type="button">BEGIN → 01 CAPTURE</button>`;
+    wirePanelChrome();
     wireRows();
     panelEl.querySelector("#btnStartTour").addEventListener("click", () => onGoto(1));
-    panelEl.classList.add("open");
+    setPanelOpen(true);
     chipEl.textContent = `00 / ${TOTAL} — ${STATIONS[0].name}`;
     setDots(0);
     setLeg(0);
@@ -274,16 +295,17 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
 
   /* overview "PIPELINE" panel: the method end-to-end, rows rail-travel */
   function showPipeline() {
-    panelEl.innerHTML =
+    panelEl.innerHTML = closeButtonHTML() +
       `<p class="panel-kicker hud-mono">MV-SAM3D · PIPELINE</p>` +
       `<p class="panel-scope hud-mono">INTERACTIVE PAPER MAP</p>` +
       `<h2>Three cameras to kilograms.</h2>` +
       `<p class="panel-body">The gate and eight stations retrace the method end-to-end. Click a step to fly there, or orbit and zoom the ranch freely — click any exhibit to visit it.</p>` +
       `<div class="pipe-rows">${pipelineRowsHTML()}</div>` +
       `<button id="btnStartTour" class="hud-mono" type="button">START AT THE GATE →</button>`;
+    wirePanelChrome();
     wireRows();
     panelEl.querySelector("#btnStartTour").addEventListener("click", () => onGoto(0));
-    panelEl.classList.add("open");
+    setPanelOpen(true);
     setDots(-1);
     setLeg(-1);
   }
@@ -300,9 +322,11 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
 export function makeStationMarkers(scene, onGoto) {
   const markers = [];
   STATIONS.forEach((s, i) => {
-    const el = document.createElement("div");
+    const el = document.createElement("button");
     el.className = "station-marker hud-mono";
+    el.type = "button";
     el.dataset.station = i;
+    el.setAttribute("aria-label", `Go to station ${s.num} ${s.name}`);
     el.innerHTML =
       `<span class="marker-num">${i}</span><span class="marker-name">${s.name}</span>`;
     el.addEventListener("click", () => onGoto(i));

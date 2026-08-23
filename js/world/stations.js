@@ -4,18 +4,17 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { ConvexGeometry } from "../../vendor/ConvexGeometry.js";
-import { STATIONS } from "./rail.js?v=20260813-camera-mount-review";
-import {
-  FUTURE_FACTORY_PROXIMITY, FUTURE_RIG_CAPTURE_POINTS, FUTURE_RIG_PROXIMITY
-} from "./environment.js?v=20260813-camera-mount-review";
+import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
+import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260823-step05-turntable-step08-reliable";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260812-view-routing";
-import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js";
+import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js?v=20260823-proxy-lod";
 import { createDeferredReconPlayer } from "../lib/recon-player.js?v=20260812-virtual-clock";
-import { createCameraFlash } from "../lib/camera-flash.js";
+import { cameraFlashTexture, createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-turntable-step08-reliable";
 import {
-  DEPLOYMENT_PERIOD, deploymentOneShotStateAt, deploymentProximity, deploymentStateAt
-} from "./deployment-sim.js?v=20260812-sequential-carry";
+  DEPLOYMENT_PERIOD, deploymentOneShotStateAt, deploymentReducedMotionStateAt,
+  deploymentStateAt
+} from "./deployment-sim.js?v=20260823-step05-turntable-step08-reliable";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;
@@ -97,24 +96,40 @@ export function displayViewUrl(url) {
 
 const texLoader = new THREE.TextureLoader();
 let stationTexturesStarted = false;
+let stationTextureRenderer = null;
+let stationTextureWarmup = null;
 const deferredTextureStarts = [];
 
-export function startStationTextures() {
+function uploadStationTexture(tex) {
+  if (!stationTextureRenderer?.initTexture || !tex) return;
+  try {
+    stationTextureRenderer.initTexture(tex);
+  } catch (err) {
+    /* Texture upload is an optimisation only. A renderer/context transition can
+       invalidate initTexture while the decoded image remains perfectly usable. */
+    console.warn("station texture GPU prewarm skipped:", err);
+  }
+}
+
+export function startStationTextures(renderer = null) {
+  if (renderer) stationTextureRenderer = renderer;
   if (stationTexturesStarted) {
     /* Re-entering an unavailable source station is a real retry. Successful
        cache entries stay resident; only failed local assets are requested. */
     for (const entry of texCache.values()) {
-      if (entry.failed) entry.start?.();
+      if (entry.loaded) uploadStationTexture(entry.tex);
+      else if (entry.failed) entry.start?.();
     }
-    return;
+    return stationTextureWarmup || Promise.resolve();
   }
   stationTexturesStarted = true;
   /* Release in small batches instead of one synchronous loop. Firing all of
      them at once put six 1280x720 decodes on the same millisecond, so their
      GPU uploads landed in the same frame — measured as part of the stall on
-     first arrival at station 01. Idle callbacks spread that over a few frames;
-     the boards fill in a beat later, which nobody sees. */
+     first arrival at station 01. Idle callbacks spread that over a few loading
+     frames, and READY now waits for the first local attempt to settle. */
   const queue = deferredTextureStarts.splice(0);
+  const firstAttempts = [...texCache.values()].map((entry) => entry.firstAttempt);
   const pump = () => {
     for (let n = 0; n < 2 && queue.length; n++) queue.shift()();
     if (!queue.length) return;
@@ -122,6 +137,12 @@ export function startStationTextures() {
     else requestAnimationFrame(pump);
   };
   pump();
+  stationTextureWarmup = Promise.all(firstAttempts).then(() => {
+    for (const entry of texCache.values()) {
+      if (entry.loaded) uploadStationTexture(entry.tex);
+    }
+  });
+  return stationTextureWarmup;
 }
 
 /* immediate thumbnail-only cache for the gate pipeline board. Its filenames
@@ -153,9 +174,12 @@ const texCache = new Map();
 export function sharedTex(url, onLoad, onError = null) {
   let entry = texCache.get(url);
   if (!entry) {
+    let settleFirstAttempt;
     entry = {
       loaded: false, loading: false, failed: false,
-      cbs: [], errorCbs: [], tex: new THREE.Texture(), start: null
+      cbs: [], errorCbs: [], tex: new THREE.Texture(), start: null,
+      firstAttempt: new Promise((resolve) => { settleFirstAttempt = resolve; }),
+      firstAttemptSettled: false
     };
     texCache.set(url, entry);
     const start = () => {
@@ -166,11 +190,20 @@ export function sharedTex(url, onLoad, onError = null) {
         t.colorSpace = THREE.SRGBColorSpace;
         entry.loading = false;
         entry.loaded = true;
+        uploadStationTexture(t);
+        if (!entry.firstAttemptSettled) {
+          entry.firstAttemptSettled = true;
+          settleFirstAttempt(true);
+        }
         for (const cb of entry.cbs.splice(0)) cb(t);
         entry.errorCbs.length = 0;
       }, undefined, (error) => {
         entry.loading = false;
         entry.failed = true;
+        if (!entry.firstAttemptSettled) {
+          entry.firstAttemptSettled = true;
+          settleFirstAttempt(false);
+        }
         /* Preserve success callbacks so a later station re-entry can retry and
            finish the same already-built board/card rather than rebuilding it. */
         for (const cb of entry.errorCbs) cb(error);
@@ -2597,12 +2630,17 @@ const METHODS = [
 ];
 
 const COMPARE_SPACING = 2.8;
+/* Keep the decisive Agreement model inside the desktop safe frame while the
+   reader panel is open. The full five-plinth array shifts as one unit, so the
+   synchronized turntable and method spacing remain directly comparable. */
+const COMPARE_SAFE_FRAME_X = -2.6;
 /* All five sources use canonical (width, height, length) axes. Present them at
    the same left-facing three-quarter yaw so geometry, rather than an accidental
    asset-local camera angle, is what changes across the comparison. */
 const COMPARE_MODEL_YAW = -0.9;
 const RGBD_MODEL_YAW = COMPARE_MODEL_YAW + Math.PI;
-const compareX = (i) => (i - (METHODS.length - 1) / 2) * COMPARE_SPACING;
+const compareX = (i) =>
+  (i - (METHODS.length - 1) / 2) * COMPARE_SPACING + COMPARE_SAFE_FRAME_X;
 
 function methodPlaque(m) {
   return canvasPlane(2.4, 0.72, 512, 154, (ctx, W, H) => {
@@ -2621,9 +2659,10 @@ function methodPlaque(m) {
   });
 }
 
-/* Low-tier Step-05 stand-in: preserve each source GLB untouched, but represent
-   one unfocused surface method with a deterministic sample of its real
-   vertices. The native RGB+D POINTS primitive is already the measured dataset
+/* Step-05 stand-in: preserve each source GLB untouched, but keep a deterministic
+   sample of its real vertices as the screen-size LOD silhouette. Low tier also
+   uses the same proxy for one rotating unfocused method at the comparison
+   station. The native RGB+D POINTS primitive is already the measured dataset
    geometry, so it is never replaced by a proxy or presented as a mesh. */
 function pointProxyForModel(obj, color, budget = 18000) {
   obj.updateMatrixWorld(true);
@@ -2658,7 +2697,7 @@ function pointProxyForModel(obj, color, budget = 18000) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute("position", new THREE.BufferAttribute(xyz, 3));
     if (rgb) geo.setAttribute("color", new THREE.BufferAttribute(rgb, 3));
-    const points = new THREE.Points(geo, new THREE.PointsMaterial({
+    const proxyMat = new THREE.PointsMaterial({
       color: rgb ? 0xffffff : color,
       vertexColors: !!rgb,
       size: 0.028,
@@ -2666,18 +2705,31 @@ function pointProxyForModel(obj, color, budget = 18000) {
       opacity: 0.88,
       depthWrite: false,
       sizeAttenuation: true
-    }));
+    });
+    proxyMat.userData.lodBaseOpacity = proxyMat.opacity;
+    const points = new THREE.Points(geo, proxyMat);
     rootInverse.clone().multiply(mesh.matrixWorld)
       .decompose(points.position, points.quaternion, points.scale);
     proxy.add(points);
     proxyPoints += count;
   }
   proxy.visible = false;
-  obj.add(proxy);
+  proxy.userData.opacityScale = 1;
+  /* Point transforms above are relative to obj. Mount the proxy beside obj with
+     the same local transform, so the LOD gate can hide the full root without
+     hiding its stand-in too. */
+  if (obj.parent) {
+    proxy.position.copy(obj.position);
+    proxy.quaternion.copy(obj.quaternion);
+    proxy.scale.copy(obj.scale);
+    obj.parent.add(proxy);
+  } else {
+    obj.add(proxy);
+  }
   return { proxy, meshes: meshes.map(({ mesh }) => mesh), points: proxyPoints };
 }
 
-function buildCompare(scene, s, qualityTier = "high") {
+function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
   const g = new THREE.Group();
   faceCam(g, s);
   const anchors = {}, shimmers = {};
@@ -2686,6 +2738,10 @@ function buildCompare(scene, s, qualityTier = "high") {
   let agreementGhosted = false;
   let agreementLoadState = "loading";
   let processRunId = null;
+  let isActive = false;
+  let lastTurntableT = null;
+  let turntableYaw = 0;
+  const turntableSpeed = 0.20;
   const lowTier = qualityTier === "low";
   METHODS.forEach((m, i) => {
     const x = compareX(i);
@@ -2745,6 +2801,7 @@ function buildCompare(scene, s, qualityTier = "high") {
       }
     });
     if (entry.proxy) {
+      entry.proxy.userData.opacityScale = on ? 0.05 / 0.88 : 1;
       entry.proxy.traverse((o) => {
         if (o.material?.opacity !== undefined) o.material.opacity = on ? 0.05 : 0.88;
       });
@@ -2771,16 +2828,19 @@ function buildCompare(scene, s, qualityTier = "high") {
       obj.traverse((o) => {
         if (o.isPoints) nativePoints += o.geometry?.getAttribute("position")?.count || 0;
       });
+      const proxyBudget = qualityTier === "low" ? 9000
+        : qualityTier === "mid" ? 14000 : 18000;
       const sampled = nativePoints > 0
         ? { proxy: null, meshes: [], points: nativePoints, kind: "point-cloud" }
-        : lowTier
-          ? { ...pointProxyForModel(obj, method?.hot ? AMBER : ICE), kind: "surface-model" }
-          : { proxy: null, meshes: [], points: 0, kind: "surface-model" };
-      mounted.set(key, { obj, ...sampled });
+        : { ...pointProxyForModel(obj, method?.hot ? AMBER : ICE, proxyBudget),
+          kind: "surface-model" };
+      const entry = { obj, ...sampled };
+      mounted.set(key, entry);
       if (key === "agreement") {
         agreementLoadState = "ready";
-        ghostModel(mounted.get(key), agreementGhosted);
+        ghostModel(entry, agreementGhosted);
       }
+      return entry;
     },
     markModelLoading(key) {
       if (key === "agreement" && !mounted.has(key)) agreementLoadState = "loading";
@@ -2794,17 +2854,40 @@ function buildCompare(scene, s, qualityTier = "high") {
     },
     get lodState() {
       return {
-        mode: lowTier ? "adaptive-surfaces-plus-native-rgbd-points" : "full-models-plus-native-rgbd-points",
+        mode: lowTier
+          ? "screen-size-and-focused-proxies-plus-native-rgbd-points"
+          : "screen-size-proxies-plus-native-rgbd-points",
         entries: [...mounted].map(([key, entry]) => ({
           key, kind: entry.kind, points: entry.points,
           mountBounds: entry.obj.userData.mountBounds || null
-        }))
+        })),
+        turntable: {
+          active: isActive && !reducedMotion,
+          synchronized: true,
+          yaw: turntableYaw,
+          speed: reducedMotion ? 0 : turntableSpeed
+        }
       };
     },
+    onActive(t) {
+      isActive = true;
+      lastTurntableT = t;
+    },
+    onInactive() {
+      isActive = false;
+      lastTurntableT = null;
+    },
     update(t) {
-      /* Keep every reconstruction at the same canonical yaw. Continuous
-         turntable motion made shape differences harder to compare and could
-         leave nominally aligned assets reading as unrelated poses. */
+      /* Rotate the five centred mounts as one synchronized turntable. Their
+         authored relative yaws stay intact, so visitors can inspect the full
+         shapes without turning the comparison into five unrelated poses. */
+      if (isActive && !reducedMotion) {
+        const dt = lastTurntableT === null
+          ? 0 : Math.max(0, t - lastTurntableT);
+        turntableYaw = (turntableYaw + dt * turntableSpeed) % (Math.PI * 2);
+        for (const anchor of Object.values(anchors)) anchor.rotation.y = turntableYaw;
+        lastTurntableT = t;
+      }
       if (!lowTier) return;
       const focus = Math.floor(t / 3.2) % METHODS.length;
       const focusKey = METHODS[focus].key;
@@ -2819,11 +2902,13 @@ function buildCompare(scene, s, qualityTier = "high") {
       for (const [key, entry] of mounted) {
         if (!entry.proxy) continue;
         if (key === "agreement" && agreementGhosted) {
+          entry.proxy.userData.focusProxyActive = false;
           entry.meshes.forEach((mesh) => { mesh.visible = true; });
           entry.proxy.visible = false;
           continue;
         }
         const pointMode = key === proxyKey;
+        entry.proxy.userData.focusProxyActive = pointMode;
         entry.meshes.forEach((mesh) => { mesh.visible = !pointMode; });
         entry.proxy.visible = pointMode;
       }
@@ -3236,10 +3321,45 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
   scanner.add(scanCurtain);
   g.add(scanner);
 
+  /* Strong authored shutter feedback for the automatic line. Three small
+     glows sit on the physical L/R/T camera origins, while one larger soft wash
+     keeps the burst readable from the Station 08 safe-frame camera even when
+     the right-side reader panel covers part of the real gantry. All four use
+     the same 64px radial texture already shared by Station 01. */
+  const captureFlashGlows = FUTURE_RIG_CAPTURE_POINTS.map((spec) => {
+    const mat = new THREE.SpriteMaterial({
+      map: cameraFlashTexture(), color: 0xfff4dc,
+      blending: THREE.AdditiveBlending, transparent: true,
+      depthWrite: false, depthTest: false, opacity: 0, fog: false,
+      toneMapped: false
+    });
+    const glow = new THREE.Sprite(mat);
+    glow.name = `futureCaptureFlash-${spec.id}`;
+    glow.position.copy(g.worldToLocal(new THREE.Vector3(spec.x, spec.y, spec.z)));
+    glow.scale.set(0.1, 0.1, 1);
+    glow.renderOrder = 8;
+    glow.visible = false;
+    g.add(glow);
+    return { glow, mat };
+  });
+  const flashWashMat = new THREE.SpriteMaterial({
+    map: cameraFlashTexture(), color: 0xfff7e8,
+    blending: THREE.AdditiveBlending, transparent: true,
+    depthWrite: false, depthTest: false, opacity: 0, fog: false,
+    toneMapped: false
+  });
+  const flashWash = new THREE.Sprite(flashWashMat);
+  flashWash.name = "futureCaptureFlashWash";
+  flashWash.position.set(3.05, 2.08, -3.0);
+  flashWash.scale.set(0.1, 0.1, 1);
+  flashWash.renderOrder = 7;
+  flashWash.visible = false;
+  g.add(flashWash);
+
   /* The workpiece is a real three-image Case 001 cartridge riding the belt.
      Thumbnail derivatives keep this station cheap and preserve source PNGs. */
   const carrier = new THREE.Group();
-  const tray = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.14, 0.94), steel);
+  const tray = new THREE.Mesh(new THREE.BoxGeometry(2.34, 0.14, 1.08), steel);
   tray.position.y = 0.02;
   carrier.add(tray);
   const photoCards = [];
@@ -3253,16 +3373,16 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
   captureOrder.forEach(({ file, label }, i) => {
     const card = new THREE.Group();
     const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(0.58, 0.62, 0.055), darkSteel);
+      new THREE.BoxGeometry(0.72, 0.78, 0.055), darkSteel);
     const imageMat = new THREE.MeshBasicMaterial({
       color: 0xffffff, map: gateThumbTex(file)
     });
-    const image = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.48), imageMat);
+    const image = new THREE.Mesh(new THREE.PlaneGeometry(0.66, 0.60), imageMat);
     image.position.z = 0.031;
-    const tag = boardLabel(label, 0.62);
-    tag.position.set(0, -0.43, 0.04);
+    const tag = boardLabel(label, 0.76);
+    tag.position.set(0, -0.52, 0.04);
     card.add(frame, image, tag);
-    card.position.set((i - 1) * 0.61, 0.48, 0.18);
+    card.position.set((i - 1) * 0.76, 0.57, 0.18);
     card.rotation.y = (i - 1) * -0.12;
     carrier.add(card);
     photoCards.push(card);
@@ -3280,7 +3400,7 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
     const spec = FUTURE_RIG_CAPTURE_POINTS[i];
     const start = g.worldToLocal(new THREE.Vector3(spec.x, spec.y, spec.z));
     const end = new THREE.Vector3(
-      3.25 + (i - 1) * 0.61, 1.48, -2.82);
+      3.25 + (i - 1) * 0.76, 1.57, -2.82);
     flight.position.copy(start);
     flight.scale.setScalar(0.82);
     flight.visible = false;
@@ -3326,7 +3446,7 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
   pointGeo.setAttribute("position", new THREE.BufferAttribute(payload.positions, 3));
   pointGeo.setDrawRange(0, 0);
   const pointMat = new THREE.PointsMaterial({
-    color: ICE, size: 0.047, transparent: true, opacity: 0.94,
+    color: ICE, size: 0.060, transparent: true, opacity: 1.0,
     depthWrite: false, depthTest: true, sizeAttenuation: true
   });
   const points = new THREE.Points(pointGeo, pointMat);
@@ -3338,8 +3458,8 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
   let bb = new THREE.Box3().setFromObject(cloud);
   const cloudSize = bb.getSize(new THREE.Vector3());
   cloud.scale.setScalar(Math.min(
-    1.42 / Math.max(cloudSize.x, 1e-6),
-    1.25 / Math.max(cloudSize.y, 1e-6)));
+    1.58 / Math.max(cloudSize.x, 1e-6),
+    1.40 / Math.max(cloudSize.y, 1e-6)));
   cloud.updateMatrixWorld(true);
   bb = new THREE.Box3().setFromObject(cloud);
   const cloudCenter = bb.getCenter(new THREE.Vector3());
@@ -3424,22 +3544,13 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
     label.position.set(x, x === -0.35 ? 3.22 : 3.32, -3.0);
     g.add(label);
   }
-  const nameplate = canvasPlane(5.1, 0.52, 1120, 114, (ctx, W, H) => {
-    ctx.fillStyle = "#0b0e12";
-    ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = "#e39b2d";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(2, 2, W - 4, H - 4);
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#e39b2d";
-    ctx.font = "500 32px " + MONO;
-    ctx.fillText("SIMULATED DEPLOYMENT LINE", W / 2, 45);
-    ctx.fillStyle = "#8b95a0";
-    ctx.font = "500 20px " + MONO;
-    ctx.fillText("RECORDED CASE 001 RGB + 5,941-POINT 3D REPLAY", W / 2, 84);
-  });
-  nameplate.position.set(0, 4.22, -3.55);
+  /* One persistent machine-status surface makes the post-flash sequence
+     legible from the arrival camera. It updates only on semantic/bucket
+     changes, avoiding a full canvas texture upload every frame. */
+  const nameplate = canvasPlane(5.1, 0.76, 1120, 168, () => {});
+  nameplate.position.set(0, 4.20, -3.55);
   g.add(nameplate);
+  const nameplateCtx = nameplate.userData.canvas.getContext("2d");
 
   const lampMats = [];
   const stageX = [3.25, 1.65, -0.35, -3.25];
@@ -3458,14 +3569,82 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
   stationSpot(scene, s, 86, new THREE.Vector3(-12.0, 0, -3.2));
   stationSpot(scene, s, 48, new THREE.Vector3(-12.0, 0, 3.2));
 
-  let currentState = deploymentStateAt(0, { reducedMotion });
+  /* Before the first visit the line waits at its real first stage. In
+     particular, reduced-motion must not show 480 kg and then jump backward to
+     capture when the visitor arrives. */
+  let currentState = deploymentStateAt(0);
   let runSince = null;
-  let proximityInside = false;
-  let proximityDistance = Infinity;
-  let proximityZone = null;
+  let isActive = false;
+  let completingCycle = false;
+  let finishingCycleIndex = 0;
+  let lastRuntimeT = 0;
   let triggerSource = "idle";
   let visiblePoints = 0;
   let terminalSignature = "";
+  let nameplateSignature = "";
+  let visualStatus = "READY · AUTO STARTS ON ARRIVAL";
+
+  /* Accessibility should suppress flashes and spatial motion, not suppress
+     the story. Run one bounded semantic pass for reduced-motion visitors so
+     CAPTURE → PHOTOS → 3D → KG remains legible, then park at completion. */
+  function activeStateAt(local) {
+    return reducedMotion
+      ? deploymentReducedMotionStateAt(local)
+      : deploymentStateAt(local);
+  }
+
+  function boundedStateAt(local) {
+    const state = reducedMotion
+      ? deploymentReducedMotionStateAt(local)
+      : deploymentOneShotStateAt(local);
+    return { ...state, cycleIndex: finishingCycleIndex };
+  }
+
+  function drawNameplate(state, force = false) {
+    const pointBucket = Math.floor((state.pointFraction || 0) * 10);
+    const signature = `${state.phase}:${state.photoCount}:${state.activeFlash}:${pointBucket}:${state.weightReady}`;
+    if (!force && signature === nameplateSignature) return;
+    nameplateSignature = signature;
+    if (state.phase === "capture") {
+      const flashName = ["LEFT", "RIGHT", "TOP"][state.activeFlash];
+      visualStatus = flashName
+        ? `FLASH · ${flashName} CAMERA`
+        : `CAPTURE · PHOTO ${Math.min(3, state.photoCount + 1)} OF 3`;
+    } else if (state.phase === "images") {
+      visualStatus = "PHOTOS · 3 RECORDED VIEWS MOVING";
+    } else if (state.phase === "reconstruct") {
+      visualStatus = `3D BUILD · ${visiblePoints.toLocaleString()} / ${payload.meta.count.toLocaleString()} POINTS`;
+    } else if (state.weightReady) {
+      visualStatus = `COMPLETE · ${state.demoKg} kg`;
+    } else {
+      visualStatus = "ESTIMATE · 3D MODEL MOVING TO KG";
+    }
+
+    const W = 1120, H = 168;
+    nameplateCtx.fillStyle = "#0b0e12";
+    nameplateCtx.fillRect(0, 0, W, H);
+    nameplateCtx.strokeStyle = state.weightReady ? "#86d7ea" : "#e39b2d";
+    nameplateCtx.lineWidth = 6;
+    nameplateCtx.strokeRect(3, 3, W - 6, H - 6);
+    nameplateCtx.textAlign = "center";
+    nameplateCtx.fillStyle = "#8b95a0";
+    nameplateCtx.font = "500 21px " + MONO;
+    nameplateCtx.fillText("SIMULATED DEPLOYMENT LINE · AUTOMATIC", W / 2, 39);
+    nameplateCtx.fillStyle = state.weightReady ? "#86d7ea" : "#e39b2d";
+    let statusFont = 54;
+    nameplateCtx.font = `${statusFont}px ${BLACK}`;
+    const maxStatusWidth = W - 100;
+    const measuredStatusWidth = nameplateCtx.measureText(visualStatus).width;
+    if (measuredStatusWidth > maxStatusWidth) {
+      statusFont = Math.max(40, Math.floor(statusFont * maxStatusWidth / measuredStatusWidth));
+      nameplateCtx.font = `${statusFont}px ${BLACK}`;
+    }
+    nameplateCtx.fillText(visualStatus, W / 2, 105);
+    nameplateCtx.fillStyle = "#8b95a0";
+    nameplateCtx.font = "500 18px " + MONO;
+    nameplateCtx.fillText("RECORDED CASE 001 RGB → 5,941-POINT 3D → SIMULATED KG UI", W / 2, 143);
+    nameplate.userData.tex.needsUpdate = true;
+  }
 
   function drawTerminal(state, force = false) {
     const signature = state.phase + ":" + state.weightReady;
@@ -3533,7 +3712,6 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
   function applyState(state, local) {
     currentState = state;
     updateStageLamps(state);
-    drawTerminal(state);
 
     /* Empty tray at capture; real L/R/T cards appear and travel during images,
        then feed into the reconstruction cage. */
@@ -3547,8 +3725,8 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
     } else if (state.phaseIndex > 2) {
       consume = 1;
     }
-    /* Reduced motion is a static cutaway of the whole line: leave one RGB
-       cartridge parked at its station instead of showing only final output. */
+    /* Reduced motion keeps the equipment stationary while the semantic stage,
+       recorded photos, 3D build, and kg readout still advance. */
     if (reducedMotion) {
       carrierX = 1.65;
       consume = 0;
@@ -3570,9 +3748,26 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
       flight.rotation.z = (1 - p) * (i - 1) * 0.12;
     });
 
+    const flashStrengths = reducedMotion
+      ? [0, 0, 0] : (state.flashStrengths || [0, 0, 0]);
+    let maxFlash = 0;
+    captureFlashGlows.forEach(({ glow, mat }, i) => {
+      const k = flashStrengths[i] || 0;
+      maxFlash = Math.max(maxFlash, k);
+      glow.visible = k > 0.012;
+      mat.opacity = Math.min(1, 0.16 + k * 1.12);
+      const size = 0.75 + k * 2.15;
+      glow.scale.set(size, size, 1);
+    });
+    flashWash.visible = maxFlash > 0.012;
+    flashWashMat.opacity = Math.min(0.82, maxFlash * 0.78);
+    flashWash.scale.set(4.4 + maxFlash * 2.4, 3.1 + maxFlash * 1.8, 1);
+
     visiblePoints = Math.min(payload.meta.count,
       Math.round(payload.meta.count * state.pointFraction));
     pointGeo.setDrawRange(0, visiblePoints);
+    drawNameplate(state);
+    drawTerminal(state);
     const transferring3D = state.phase === "estimate";
     /* In motion there is only one visible result: it leaves the chamber and
        travels north. Reduced motion keeps a static chamber copy as a cutaway. */
@@ -3587,9 +3782,10 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
     transferPointModel.rotation.y = reducedMotion ? 0 : local * 0.16;
     scanCurtain.visible = !reducedMotion && state.phase === "capture";
     scanMat.opacity = scanCurtain.visible
-      ? 0.12 + 0.28 * Math.sin(local * 10) ** 2 : 0;
+      ? Math.min(0.88, 0.12 + 0.22 * Math.sin(local * 10) ** 2 + maxFlash * 0.52)
+      : 0;
     lensMat.emissiveIntensity = state.phase === "capture"
-      ? 0.7 + 1.1 * Math.sin(local * 12) ** 2 : 0.22;
+      ? 0.7 + 1.1 * Math.sin(local * 12) ** 2 + maxFlash * 14 : 0.22;
 
     if (!reducedMotion && visiblePoints > 0) {
       cloudPivot.rotation.y = local * 0.16;
@@ -3603,40 +3799,48 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
 
   updateBelt(0);
   drawTerminal(currentState, true);
+  drawNameplate(currentState, true);
   applyState(currentState, 0);
 
   return {
-    /* Station entry, the physical gantry and the visible factory all drive the
-       same one-shot clock. It keeps advancing after station focus clears and
-       parks at the final kg state instead of silently looping. */
-    tickRuntime(t, subject, isActive = false) {
-      updateBelt(t);
-      const gantry = deploymentProximity(subject, FUTURE_RIG_PROXIMITY);
-      const factory = deploymentProximity(subject, FUTURE_FACTORY_PROXIMITY);
-      const proximity = gantry.distance <= factory.distance
-        ? { ...gantry, zone: "gantry" }
-        : { ...factory, zone: "factory" };
-      const inside = gantry.inside || factory.inside;
-      proximityDistance = proximity.distance;
-      proximityZone = inside ? (gantry.inside ? "gantry" : "factory") : null;
-      const elapsed = runSince === null ? Infinity : Math.max(0, t - runSince);
-      if (!isActive && inside && !proximityInside &&
-          (runSince === null || elapsed >= DEPLOYMENT_PERIOD)) {
-        runSince = t;
-        triggerSource = `${proximityZone}-proximity`;
-        applyState(deploymentStateAt(0, { reducedMotion }), 0);
-      }
-      proximityInside = inside;
-      if (runSince !== null) {
+    /* Arriving at Station 08 starts the authored loop: cameras fire, recorded
+       photos hand off, the real point cloud reconstructs, and the kg UI
+       completes. It repeats every DEPLOYMENT_PERIOD while the station remains
+       active. Once a shutter has armed a cycle, that cycle is allowed to reach
+       the stable kg result even if roam proximity or navigation drops focus. */
+    tickRuntime(t) {
+      lastRuntimeT = t;
+      if (runSince !== null && (isActive || completingCycle)) {
         const local = Math.max(0, t - runSince);
-        applyState(deploymentOneShotStateAt(local, { reducedMotion }),
-          Math.min(local, DEPLOYMENT_PERIOD - 1e-3));
+        if (!reducedMotion) updateBelt(local);
+        applyState(isActive ? activeStateAt(local) : boundedStateAt(local), local);
+        if (((!isActive && completingCycle) || reducedMotion) &&
+            local >= DEPLOYMENT_PERIOD) {
+          completingCycle = false;
+          runSince = null;
+        }
       }
     },
     onActive(t) {
       runSince = t;
-      triggerSource = "station-navigation";
-      applyState(deploymentStateAt(0, { reducedMotion }), 0);
+      isActive = true;
+      completingCycle = false;
+      finishingCycleIndex = 0;
+      triggerSource = "station-arrival-auto";
+      applyState(activeStateAt(0), 0);
+    },
+    onInactive() {
+      isActive = false;
+      /* Rebase the current loop to a bounded one-shot clock. This avoids both
+         a frozen flash and the old failure where losing the roam proximity
+         gate silently cancelled everything after capture. */
+      if (runSince !== null) {
+        finishingCycleIndex = currentState.cycleIndex || 0;
+        const cycleTime = Math.min(
+          DEPLOYMENT_PERIOD - 1e-3, Math.max(0, currentState.cycleTime || 0));
+        runSince = lastRuntimeT - cycleTime;
+        completingCycle = true;
+      }
     },
     update() {},
     get deploymentState() {
@@ -3644,15 +3848,16 @@ function buildFuture(scene, s, payload, reducedMotion = false) {
         ...currentState,
         layout: "spatial-conveyor",
         placement: "north-outside-paddock-northbound",
-        triggerMode: "gantry-factory-proximity-or-station-entry",
+        triggerMode: "station-entry-auto-loop",
         triggerSource,
-        proximityInside,
-        proximityZone,
-        proximityDistance: Number.isFinite(proximityDistance) ? proximityDistance : null,
-        proximityRadius: proximityZone === "factory"
-          ? FUTURE_FACTORY_PROXIMITY.radius : FUTURE_RIG_PROXIMITY.radius,
+        requiresDrivenSubject: false,
+        loops: !reducedMotion,
+        loopPeriod: DEPLOYMENT_PERIOD,
+        isLooping: isActive && !reducedMotion,
+        isFinishing: !isActive && completingCycle,
         realPointCount: payload.meta.count,
         visiblePointCount: visiblePoints,
+        visualStatus,
         carrierX: carrier.position.x,
         outputX: transferPointModel.position.x,
         captureOrder: captureOrder.map(({ id }) => id),
@@ -3690,7 +3895,7 @@ export function buildStations(
       stage2Blending, reducedMotion),
     (sc, st) => buildFusion(sc, st, payload, multiviewReconSteps, stage2Density,
       stage2Blending, reducedMotion),
-    (sc, st) => buildCompare(sc, st, quality?.tier),
+    (sc, st) => buildCompare(sc, st, quality?.tier, reducedMotion),
     (sc, st) => buildFeatures(sc, st, payload), buildWeigh,
     (sc, st) => buildFuture(sc, st, payload, reducedMotion)];
   /* Builders add their own groups straight to the scene and return only their
@@ -3711,7 +3916,7 @@ export function buildStations(
   });
   /* the world must load plaqueless rather than not at all */
   try { addHandoffPlaques(scene); } catch (err) { console.warn("handoff plaques disabled:", err); }
-  const CAPTURE_I = 1, FEATURES_I = 6, WEIGH_I = 7, FUTURE_I = 8;
+  const CAPTURE_I = 1, COMPARE_I = 5, FEATURES_I = 6, WEIGH_I = 7, FUTURE_I = 8;
 
   const anchors = {}, shimmers = {};
   for (const ex of exhibits) {
@@ -3723,13 +3928,22 @@ export function buildStations(
      a visit to 05, station 05's models alone drew 1.39M of 1.78M triangles
      while covering roughly 24 pixels. They are gated on projected size, and
      the station in focus is always exempt. */
-  const modelLod = new ScreenSizeLod({ minFraction: 0.04 });
+  /* The low tier needs a more aggressive screen-space cutoff: lowering DPR
+     cannot save vertex cost, and Step 05 alone mounts ~1.4M triangles. Focused
+     stations are always kept below, so this only removes distant specks. */
+  const lodFraction = quality?.tier === "low" ? 0.075
+    : quality?.tier === "mid" ? 0.065
+      : 0.055;
+  const modelLod = new ScreenSizeLod({ minFraction: lodFraction });
   const rootStation = new Map();
   stationRoots.forEach((objects, i) => objects.forEach((o) => rootStation.set(o, i)));
-  function registerModelLod(obj) {
+  function registerModelLod(obj, proxyEntry = null) {
     let top = obj;
     while (top.parent && top.parent !== scene) top = top.parent;
-    modelLod.add(rootStation.has(top) ? rootStation.get(top) : null, obj);
+    modelLod.add(rootStation.has(top) ? rootStation.get(top) : null, obj, {
+      proxy: proxyEntry?.proxy || null,
+      details: proxyEntry?.meshes || []
+    });
   }
 
   function attachModel(key, gltfScene) {
@@ -3742,8 +3956,8 @@ export function buildStations(
         registerModelLod(obj);
       });
       const agreementModel = mountModel(anchors.agreement, gltfScene, 3.1, COMPARE_MODEL_YAW);
-      registerModelLod(agreementModel);
-      exhibits[5].registerMounted?.("agreement", agreementModel);
+      const comparisonEntry = exhibits[5].registerMounted?.("agreement", agreementModel);
+      registerModelLod(agreementModel, comparisonEntry);
       shimmers.agreement.visible = false;
       const featuresModel = exhibits[FEATURES_I].attachFinalModel(gltfScene);
       if (featuresModel) registerModelLod(featuresModel);
@@ -3752,20 +3966,22 @@ export function buildStations(
          exports despite sharing the same canonical axes. Flip only this source. */
       const yaw = key === "rgbd" ? RGBD_MODEL_YAW : COMPARE_MODEL_YAW;
       const model = mountModel(anchors[key], gltfScene, 3.1, yaw);
-      registerModelLod(model);
-      exhibits[5].registerMounted?.(key, model);
+      const comparisonEntry = exhibits[5].registerMounted?.(key, model);
+      registerModelLod(model, comparisonEntry);
       shimmers[key].visible = false;
     }
   }
 
   let activeI = -1;   // station in focus (-1 = overview/travel/intro)
-  /* `subject` is the driven calf's world position (null outside roam). The
-     capture rig has to watch it EVERY frame, not only while station 01 is the
-     active exhibit — walking under the gantry is a roam-mode reward, and roam
-     usually leaves activeI at whatever station was last visited. */
-  function update(t, subject = null) {
-    exhibits[FUTURE_I].tickRuntime?.(t, subject, activeI === FUTURE_I);
-    updateActiveExhibit(exhibits, activeI, t);
+  let lastRuntimeTime = null;
+  /* `subject` is the driven calf's world position (null outside roam). Only the
+     physical Station-01 capture rig follows it. Station 08 is an authored
+     arrival-triggered sequence and deliberately does not consume the subject. */
+  function update(t, subject = null, runtimeT = t) {
+    lastRuntimeTime = runtimeT;
+    exhibits[FUTURE_I].tickRuntime?.(runtimeT);
+    updateActiveExhibit(
+      exhibits, activeI, activeI === COMPARE_I ? runtimeT : t);
     exhibits[CAPTURE_I].tickCameras?.(t, subject);
     const activeShimmers = exhibits[activeI]?.shimmers;
     if (activeShimmers) {
@@ -3787,18 +4003,24 @@ export function buildStations(
   }
 
   /* a station became active (dwell / tour dwell) — arms grow-on-dwell exhibits */
-  function setActive(i, t) {
+  function setActive(i, t, runtimeT = null) {
+    if (activeI >= 0 && activeI !== i) exhibits[activeI]?.onInactive?.(t);
     activeI = i;
     lightRig.setFocus(i);
     /* never let the size gate blank the exhibit the visitor came to see, no
        matter where the camera ends up */
     modelLod.keep(i);
     const ex = exhibits[i];
-    if (ex && ex.onActive) ex.onActive(t);
+    if (ex && ex.onActive) {
+      const activationT = (i === FUTURE_I || i === COMPARE_I)
+        ? (runtimeT ?? lastRuntimeTime ?? t) : t;
+      ex.onActive(activationT);
+    }
   }
 
   /* overview / intro: no focused station, relight the whole ranch */
   function clearActive() {
+    if (activeI >= 0) exhibits[activeI]?.onInactive?.();
     activeI = -1;
     lightRig.setFocus(-1);
     modelLod.keep();
