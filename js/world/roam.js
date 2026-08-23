@@ -9,7 +9,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
+import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
 import { createChibiCattle } from "../lib/chibi-cattle.js";
 import { createThirdPersonRig, turnToward } from "../lib/third-person-rig.js?v=20260812-steering";
 
@@ -73,8 +73,8 @@ const SPOTS = [
     egg: { line: "That is the paper's 5-fold dataset result — not this cow's individual prediction.", act: "hop" }
   },
   {
-    greet: "Next stop for the herd: a walk-through RGB weigh gate.",
-    egg: { line: "No crush, no contact. Just a calf, walking. See you there. MOO!", act: "bow" }
+    greet: "Camera side or conveyor side both start the same automatic photo-to-weight loop.",
+    egg: { line: "No cattle steering required — the deployment line runs itself. MOO!", act: "bow" }
   }
 ];
 const MOOS = ["MOOOO~", "moo.", "MOO MOO!", "哞~"];
@@ -527,6 +527,11 @@ export function initRoam({
   let coachUp = false;       // the current prompt is on screen
   let coachAge = 0;
   const visited = new Set();
+  /* Most exhibits use one circular pad. Station 08 publishes extra physical
+     activation points so the camera gantry and conveyor are equally valid
+     entrances instead of demanding one invisible sweet spot. */
+  const stationActivationPoints = STATIONS.map((station) =>
+    [station.pos, ...(station.activationPoints || [])]);
 
   /* speech bubble — CSS2D above the calf's head */
   const bubbleEl = document.createElement("div");
@@ -578,9 +583,11 @@ export function initRoam({
   function nearestStation() {
     let best = -1, bd = Infinity;
     for (let i = 0; i < STATIONS.length; i++) {
-      const s = STATIONS[i].pos;
-      const d = Math.hypot(rig.state.pos.x - s.x, rig.state.pos.z - s.z);
-      if (d < bd) { bd = d; best = i; }
+      for (const point of stationActivationPoints[i]) {
+        const d = Math.hypot(
+          rig.state.pos.x - point.x, rig.state.pos.z - point.z);
+        if (d < bd) { bd = d; best = i; }
+      }
     }
     return { i: best, d: bd };
   }
@@ -588,7 +595,11 @@ export function initRoam({
     nearI = i;
     stations.setActive(i, worldT);
     env.setActiveLeg(i);
-    panels.showStation(i);        // also sets chip text + dots
+    /* Station 08 starts moving immediately. Keep its reader panel collapsed
+       in roam so the first shutter/line handoff stays visible; the station
+       chip can reopen the same content at any time. */
+    panels.showStation(i, { open: i !== 8 });
+    if (i === 8) faceExhibit(i);
     onGuideStation?.(i);
     setMarkerFocus(i);
     requestModelsForStation(i);
@@ -602,6 +613,7 @@ export function initRoam({
   function leaveStation() {
     const leaving = nearI;
     nearI = -1;
+    autoFace = null;
     onStationLeave?.(leaving, worldT);
     stations.clearActive();
     panels.hidePanel();

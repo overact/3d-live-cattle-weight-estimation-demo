@@ -4,7 +4,7 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
+import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 
 /* All numbers are the paper's real results — do not edit casually. */
@@ -74,7 +74,7 @@ export const CONTENT = [
   {
     kicker: "STATION 08 · FUTURE",
     title: "Follow the automated factory line.",
-    body: "Arriving at this station automatically starts the whole factory sequence—no extra calf positioning is required. Three visible shutter bursts issue the recorded Case 001 cards in left → right → top order; they ride the northbound line into reconstruction and become the real 5,941-point 3D cow. That completed 3D result moves into estimation before the terminal shows 480 kg—an illustrative UI value, not model inference or a Case 001 result. Once capture starts, that pass always finishes; the 15-second line repeats while you remain at Station 08.",
+    body: "Arriving beside either the camera gantry or the conveyor automatically starts the same factory sequence—no precise calf positioning is required. Three visible shutter bursts issue the recorded Case 001 cards in left → right → top order; they ride the northbound line into reconstruction and become the real 5,941-point 3D cow. That completed 3D result moves into estimation before the terminal shows 480 kg—an illustrative UI value, not model inference or a Case 001 result. Once capture starts, that pass always finishes; the 15-second line repeats while you remain anywhere in the Station 08 workcell.",
     chips: ["15S AUTO LOOP", "LEFT → RIGHT → TOP FLASH", "REAL 3D MOVES TO KG"],
     figures: []
   }
@@ -209,7 +209,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
       `</button>`;
   }
 
-  function showStation(i) {
+  function showStation(i, { open = true } = {}) {
     if (i === 0) return showGate();
     visited.add(i);
     refreshVisited();
@@ -261,7 +261,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
           onFamily(parseInt(b.dataset.family, 10));
         }));
     }
-    setPanelOpen(true);
+    setPanelOpen(open);
     chipEl.textContent = `${STATIONS[i].num} / ${TOTAL} — ${STATIONS[i].name}`;
     setDots(i);
     setLeg(i);   // every arrival path (rail, roam, tour) funnels through here

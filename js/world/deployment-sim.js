@@ -13,6 +13,9 @@ export const DEPLOYMENT_PHASES = Object.freeze([
 
 export const DEPLOYMENT_PERIOD = DEPLOYMENT_PHASES.at(-1).end;
 export const DEPLOYMENT_DEMO_KG = 480;
+/* Finish close to the cycle boundary: enough time to read the kg result, but
+   no multi-second dead zone before the next automatic capture begins. */
+export const DEPLOYMENT_RESULT_AT = 14.2;
 
 const clamp01 = (x) => Math.min(1, Math.max(0, x));
 const smooth = (x) => {
@@ -80,8 +83,9 @@ export function deploymentStateAt(elapsed, { reducedMotion = false } = {}) {
   /* In the spatial factory line the completed recorded 3D cow physically
      travels from the reconstruction chamber to estimation before kg appears. */
   const outputProgress = smooth(
-    (cycleTime - DEPLOYMENT_PHASES[3].start) / 1.6);
-  const weightReady = cycleTime >= DEPLOYMENT_PHASES[3].start + 1.6;
+    (cycleTime - DEPLOYMENT_PHASES[3].start) /
+    (DEPLOYMENT_RESULT_AT - DEPLOYMENT_PHASES[3].start));
+  const weightReady = cycleTime >= DEPLOYMENT_RESULT_AT;
 
   return {
     phase: phaseDef.id, phaseIndex, cycleTime, phaseProgress,

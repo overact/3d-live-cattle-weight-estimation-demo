@@ -6,8 +6,8 @@
    transition from claiming reconstruction finished before the trace did. */
 
 import * as THREE from "../../vendor/three.module.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
-import { displayViewUrl, sharedTex } from "./stations.js?v=20260823-step05-turntable-step08-reliable";
+import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
+import { displayViewUrl, sharedTex } from "./stations.js?v=20260823-step05-visible-spin-step08-continuous";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;
@@ -445,8 +445,18 @@ export function createPipelineCarry({
 
   function updateHud(message = null, next = null, visualState = null) {
     if (!hudEl) return;
-    const show = stage > 0 || phase !== "idle" || !!message;
-    const hudState = visualState || (phase === "idle" ? "steady" : phase);
+    /* Proximity is the durable source of truth for the deployment HUD. This
+       keeps background cargo transitions from overwriting the live Step 08
+       workcell, while leaving every pipeline state untouched underneath. */
+    const deploymentActive = proximityStation === 8;
+    const displayMessage = deploymentActive ? "DEPLOYMENT LOOP ACTIVE" : message;
+    const displayNext = deploymentActive
+      ? "CAMERA GANTRY OR CONVEYOR · PHOTO → 3D MODEL → WEIGHT"
+      : next;
+    const show = stage > 0 || phase !== "idle" || !!displayMessage;
+    const hudState = deploymentActive
+      ? "confirmed"
+      : visualState || (phase === "idle" ? "steady" : phase);
     hudEl.classList.toggle("show", show);
     hudEl.classList.toggle("processing",
       hudState === "deposit" || hudState === "waiting" || hudState === "pickup");
@@ -472,8 +482,8 @@ export function createPipelineCarry({
       : cargoStage === 2 && cargoVariant === "multi-view-next"
         ? "3 MASKED RGB VIEWS · MULTI-VIEW NEXT"
         : ARTIFACT_STAGES[currentArtifact].label;
-    if (label) label.textContent = message || artifactLabel;
-    if (nextEl) nextEl.textContent = next || defaultNext;
+    if (label) label.textContent = displayMessage || artifactLabel;
+    if (nextEl) nextEl.textContent = displayNext || defaultNext;
   }
 
   function setVisualAlpha(index, alpha) {
@@ -692,6 +702,16 @@ export function createPipelineCarry({
     lastRejection = null;
     hudConfirmUntil = 0;
 
+    /* Step 08 is a self-running deployment demonstrator, not another cargo
+       recipe. Arrival at either physical activation zone starts its scene
+       runtime independently of how far the optional evidence-chain game has
+       progressed, so its HUD confirms the live loop instead of rejecting a
+       visitor who did not play Steps 01-07 first. */
+    if (nextStation === 8) {
+      updateHud();
+      return true;
+    }
+
     if (pendingStation !== null) {
       if (nextStation === pendingStation) {
         const failedProcess = getProcessState(nextStation);
@@ -790,10 +810,10 @@ export function createPipelineCarry({
       return true;
     }
 
-    /* Result/deployment stops never accept physical cargo. They stay readable,
-       but the held artifact remains in the slot and its sole valid workcell is
+    /* The result stop never accepts physical cargo. It stays readable, but the
+       held artifact remains in the slot and its sole valid workcell is
        reported instead of silently consuming it. */
-    if (nextStation === 7 || nextStation === 8) {
+    if (nextStation === 7) {
       if (cargoStage) {
         const targetStation = submissionStationForArtifact(cargoStage, cargoVariant);
         updateHud(
@@ -804,10 +824,10 @@ export function createPipelineCarry({
         lastRejection = "wrong-station";
         return false;
       }
-      if (!weightReady || (nextStation === 8 && stage !== 7 && stage !== 8)) {
+      if (!weightReady) {
         updateHud(
-          nextStation === 7 ? "WEIGHT RESULT NOT READY" : "VIEW STEP 07 BEFORE DEPLOYMENT",
-          nextStation === 7 ? "DELIVER THE AGREEMENT MODEL TO STEP 06" : "FOLLOW THE RESULT FLOW IN ORDER",
+          "WEIGHT RESULT NOT READY",
+          "DELIVER THE AGREEMENT MODEL TO STEP 06",
           "rejected"
         );
         lastRejection = "result-not-ready";
@@ -836,6 +856,7 @@ export function createPipelineCarry({
      immediately submit to the workcell the cattle is already standing in. */
   function reconcileStation(nextStation, t, subject, heading) {
     if (nextStation === null || nextStation === undefined) {
+      const leavingDeployment = proximityStation === 8;
       proximityStation = null;
       outputReadySince = null;
       /* Pickup can only START while the cattle is at the output workcell. Once
@@ -858,6 +879,10 @@ export function createPipelineCarry({
           updateHud("WORKCELL CONTINUES WHILE YOU EXPLORE",
             `RETURN TO STEP ${String(pendingStation).padStart(2, "0")} TO COLLECT`);
         }
+      } else if (leavingDeployment) {
+        /* Clear the proximity-derived Step 08 copy and reveal whatever cargo
+           state was already present (including the empty initial state). */
+        updateHud();
       }
       return false;
     }

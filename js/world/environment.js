@@ -5,11 +5,11 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { clone as cloneSkinned } from "../../vendor/SkeletonUtils.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
+import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
 import { instanceTemplate } from "../lib/three-perf.js?v=20260823-proxy-lod";
 import { createBlobShadow } from "../lib/blob-shadow.js";
 import { createColliderSet } from "../lib/obb-collider.js";
-import { createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-turntable-step08-reliable";
+import { createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-visible-spin-step08-continuous";
 
 const AMBER = 0xe39b2d, ICE = 0x86d7ea;
 /* early dawn: deep-blue zenith, warm bright horizon, lifted fog */

@@ -4,17 +4,17 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { ConvexGeometry } from "../../vendor/ConvexGeometry.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
-import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260823-step05-turntable-step08-reliable";
+import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
+import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260823-step05-visible-spin-step08-continuous";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260812-view-routing";
 import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js?v=20260823-proxy-lod";
 import { createDeferredReconPlayer } from "../lib/recon-player.js?v=20260812-virtual-clock";
-import { cameraFlashTexture, createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-turntable-step08-reliable";
+import { cameraFlashTexture, createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-visible-spin-step08-continuous";
 import {
   DEPLOYMENT_PERIOD, deploymentOneShotStateAt, deploymentReducedMotionStateAt,
   deploymentStateAt
-} from "./deployment-sim.js?v=20260823-step05-turntable-step08-reliable";
+} from "./deployment-sim.js?v=20260823-step05-visible-spin-step08-continuous";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;
@@ -2741,7 +2741,9 @@ function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
   let isActive = false;
   let lastTurntableT = null;
   let turntableYaw = 0;
-  const turntableSpeed = 0.20;
+  /* Roughly one revolution every 18 seconds: visibly turning within a short
+     visit, while still slow enough to compare silhouettes and proportions. */
+  const turntableSpeed = 0.35;
   const lowTier = qualityTier === "low";
   METHODS.forEach((m, i) => {
     const x = compareX(i);

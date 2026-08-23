@@ -6,16 +6,16 @@ import * as THREE from "../../vendor/three.module.js";
 import { OrbitControls } from "../../vendor/OrbitControls.js";
 import { GLTFLoader } from "../../vendor/GLTFLoader.js";
 import { CSS2DRenderer } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260823-step05-turntable-step08-reliable";
-import { buildEnvironment } from "./environment.js?v=20260823-step05-turntable-step08-reliable";
-import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260823-step05-turntable-step08-reliable";
+import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
+import { buildEnvironment } from "./environment.js?v=20260823-step05-visible-spin-step08-continuous";
+import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260823-step05-visible-spin-step08-continuous";
 import { needsFullSourceTextures } from "./source-texture-policy.js";
-import { initPanels, makeStationMarkers } from "./panels.js?v=20260823-step05-turntable-step08-reliable";
+import { initPanels, makeStationMarkers } from "./panels.js?v=20260823-step05-visible-spin-step08-continuous";
 import { initTravelCaption } from "./travel-caption.js?v=20260813-rgbd-pointcloud";
 import { initStepScrubber } from "./step-scrubber.js?v=20260812-view-routing";
 import { initReaderGuide } from "./reader-guide.js?v=20260812-gantry-trigger";
-import { initRoam } from "./roam.js?v=20260823-step05-turntable-step08-reliable";
-import { createPipelineCarry } from "./pipeline-carry.js?v=20260823-step05-turntable-step08-reliable";
+import { initRoam } from "./roam.js?v=20260823-step05-visible-spin-step08-continuous";
+import { createPipelineCarry } from "./pipeline-carry.js?v=20260823-step05-visible-spin-step08-continuous";
 /* Version the changed world graph together. An old cached pre-bind-pose avatar
    adapter scales a cloned SkinnedMesh to ~1/900 and leaves only its shadow. */
 import { createGlbCattle } from "../lib/glb-cattle.js?v=20260811-fast-dense";
@@ -29,7 +29,7 @@ import {
   createRenderLifecycle,
   handleRenderPageHide,
   handleRenderPageShow
-} from "./render-lifecycle.js?v=20260823-step05-turntable-step08-reliable";
+} from "./render-lifecycle.js?v=20260823-step05-visible-spin-step08-continuous";
 
 /* ---------- params / flags ---------- */
 

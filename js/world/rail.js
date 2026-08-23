@@ -38,7 +38,14 @@ export const STATIONS = [
   /* Pull the arrival pose in modestly and bias it toward the south/capture end.
      The factory line reads larger while the right-side reader panel is open,
      and the three-camera scanner remains inside the unobstructed safe frame. */
-  { id: "future",      num: "08", name: "FUTURE",      pos: V(-28, 0, 14), look: V(-40, 2.1, 13), cam: V(-29.0, 4.7, 13), dwell: 15 }
+  {
+    id: "future", num: "08", name: "FUTURE",
+    pos: V(-28, 0, 14), look: V(-40, 2.1, 13), cam: V(-29.0, 4.7, 13), dwell: 15,
+    /* Station 08 is much wider than a normal pad. Roam activation therefore
+       follows the public entrance marker PLUS the physical camera gantry and
+       conveyor line; any one starts the same automatic, subject-free cycle. */
+    activationPoints: [V(-40, 0, 2), V(-40, 0, 13)]
+  }
 ];
 
 /* Keep the ranch readable behind the opening guide and give free-explore a

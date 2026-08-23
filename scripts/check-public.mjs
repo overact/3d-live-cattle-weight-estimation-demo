@@ -188,6 +188,8 @@ if (!worldMain.includes('if (key === "rgbd" && o.isPoints)') ||
 
 const worldCarry = fs.readFileSync(path.join(root, "js/world/pipeline-carry.js"), "utf8");
 const worldStations = fs.readFileSync(path.join(root, "js/world/stations.js"), "utf8");
+const worldRail = fs.readFileSync(path.join(root, "js/world/rail.js"), "utf8");
+const worldRoam = fs.readFileSync(path.join(root, "js/world/roam.js"), "utf8");
 const deploymentSim = fs.readFileSync(path.join(root, "js/world/deployment-sim.js"), "utf8");
 const renderLifecycle = fs.readFileSync(path.join(root, "js/world/render-lifecycle.js"), "utf8");
 const deviceTier = fs.readFileSync(path.join(root, "js/lib/device-tier.js"), "utf8");
@@ -206,13 +208,13 @@ if (!ranchHtml.includes('<button class="station-chip hud-mono ui"') ||
     !worldMain.includes("let stationRuntimeTime = 0") ||
     !worldMain.includes("frameMs - lastStationRuntimeFrameMs") ||
     !worldMain.includes("onResume: () =>") ||
-    !worldMain.includes('render-lifecycle.js?v=20260823-step05-turntable-step08-reliable') ||
+    !worldMain.includes('render-lifecycle.js?v=20260823-step05-visible-spin-step08-continuous') ||
     !renderLifecycle.includes("onResume?.()") ||
     !deviceTier.includes("export class AdaptivePixelRatio") ||
     !threePerf.includes("export class ScreenSizeLod")) {
   throw new Error("Public ranch is missing the responsive, low-FPS-safe runtime contract");
 }
-if (!worldStations.includes("turntableSpeed = 0.20") ||
+if (!worldStations.includes("turntableSpeed = 0.35") ||
     !worldStations.includes("COMPARE_SAFE_FRAME_X = -2.6") ||
     !worldStations.includes("synchronized: true") ||
     !worldStations.includes("completingCycle = true") ||
@@ -221,11 +223,27 @@ if (!worldStations.includes("turntableSpeed = 0.20") ||
     worldStations.includes("RESTART")) {
   throw new Error("Public Station 05/08 lifecycle contract is incomplete");
 }
+if (!worldRail.includes("activationPoints: [V(-40, 0, 2), V(-40, 0, 13)]") ||
+    !worldRoam.includes("stationActivationPoints") ||
+    !worldRoam.includes("for (const point of stationActivationPoints[i])") ||
+    !worldRoam.includes("panels.showStation(i, { open: i !== 8 })") ||
+    !worldRoam.includes("if (i === 8) faceExhibit(i)") ||
+    !worldCarry.includes("if (nextStation === 8)") ||
+    !worldCarry.includes("const deploymentActive = proximityStation === 8") ||
+    !worldCarry.includes("const leavingDeployment = proximityStation === 8") ||
+    !worldCarry.includes("DEPLOYMENT LOOP ACTIVE") ||
+    worldCarry.includes("VIEW STEP 07 BEFORE DEPLOYMENT")) {
+  throw new Error("Public Station 08 must activate beside both cameras and conveyor");
+}
 
 const deploymentRuntime = await import(
   `data:text/javascript;base64,${Buffer.from(deploymentSim).toString("base64")}`);
 if (deploymentRuntime.deploymentStateAt(15).cycleIndex !== 1 ||
     deploymentRuntime.deploymentStateAt(8).phase !== "reconstruct" ||
+    deploymentRuntime.deploymentStateAt(13.9).weightReady ||
+    deploymentRuntime.deploymentStateAt(13.9).outputProgress >= 1 ||
+    !deploymentRuntime.deploymentStateAt(14.2).weightReady ||
+    deploymentRuntime.DEPLOYMENT_PERIOD - deploymentRuntime.DEPLOYMENT_RESULT_AT > 1 ||
     deploymentRuntime.deploymentReducedMotionStateAt(0).phase !== "capture" ||
     !deploymentRuntime.deploymentReducedMotionStateAt(30).weightReady ||
     deploymentRuntime.deploymentReducedMotionStateAt(1).activeFlash !== -1) {
