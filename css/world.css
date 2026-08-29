@@ -31,7 +31,8 @@ html, body {
    while operational chrome appears only after the visitor picks a route. */
 body:not(.world-entered) :is(
   .labels, .station-chip, .carry-status, .dock, .hint,
-  .research-guide, .entry-toast, #stationPanel, .travel-caption
+  .research-guide, .entry-toast, #stationPanel, .travel-caption,
+  .auto-tour-hud
 ) {
   visibility: hidden;
   pointer-events: none;
@@ -241,7 +242,8 @@ body .global-nav__link--current:focus-visible {
 }
 
 #btnEnter,
-#btnExplore {
+#btnExplore,
+#btnAutoTourIntro {
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.14em;
@@ -261,9 +263,11 @@ body .global-nav__link--current:focus-visible {
 #btnEnter:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 0 44px rgba(227, 155, 45, 0.5); }
 #btnEnter:active:not(:disabled) { transform: translateY(0) scale(0.98); box-shadow: 0 0 22px rgba(227, 155, 45, 0.38); }
 #btnEnter:disabled,
-#btnExplore:disabled { opacity: 0.35; cursor: wait; box-shadow: none; }
+#btnExplore:disabled,
+#btnAutoTourIntro:disabled { opacity: 0.35; cursor: wait; box-shadow: none; }
 
-#btnExplore {
+#btnExplore,
+#btnAutoTourIntro {
   color: var(--paper);
   background: rgba(9, 12, 16, 0.45);
   border: 1px solid rgba(232, 228, 218, 0.34);
@@ -272,6 +276,12 @@ body .global-nav__link--current:focus-visible {
   transform: translateY(-2px);
   border-color: var(--ice);
   color: var(--ice);
+}
+#btnAutoTourIntro { border-color: rgba(134, 215, 234, 0.44); color: var(--ice); }
+#btnAutoTourIntro:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: var(--amber);
+  color: var(--amber);
 }
 #btnExplore:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 
@@ -931,7 +941,7 @@ body.tour #stationPanel { display: none !important; }
   .intro-evidence { font-size: 0.62rem; margin-bottom: 0.35rem; }
   #introStatus { min-height: 1.3rem; font-size: 0.56rem; }
   .intro-actions { width: 100%; gap: 0.5rem; }
-  #btnEnter, #btnExplore {
+  #btnEnter, #btnExplore, #btnAutoTourIntro {
     flex: 1 1 auto;
     min-height: 2.75rem;
     font-size: 0.62rem;
@@ -1376,4 +1386,237 @@ body.tour .travel-caption { transition: none; }
   /* phones keep the auto loop — the dock and caption own this space */
   .step-scrubber { display: none !important; }
   .crumb-strip img { width: 36px; height: 25px; }
+}
+
+/* ---------- interruptible automatic field tour ---------- */
+
+/* A single narration edge for the moving world: substantial enough to carry
+   the paper story, translucent enough to keep the animal and exhibits live. */
+.auto-tour-hud {
+  --tour-progress: 0%;
+  position: fixed;
+  left: 18px;
+  bottom: 18px;
+  z-index: 52;
+  width: min(620px, calc(100vw - 170px));
+  padding: 1rem 1.08rem 0.9rem 1.18rem;
+  border-left: 2px solid var(--amber);
+  border-top: 1px solid rgba(232, 228, 218, 0.14);
+  color: var(--paper);
+  background:
+    linear-gradient(100deg, rgba(9, 12, 16, 0.97), rgba(9, 12, 16, 0.84) 78%, rgba(9, 12, 16, 0.58));
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: auto-tour-hud-in 0.34s cubic-bezier(.2,.8,.2,1) both;
+}
+.auto-tour-hud[hidden] { display: none; }
+
+.auto-tour-hud__header,
+.auto-tour-hud__timeline,
+.auto-tour-hud__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+.auto-tour-hud__header {
+  color: var(--dim);
+  font-size: 0.56rem;
+  line-height: 1.4;
+}
+.auto-tour-hud__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--ice);
+}
+.auto-tour-hud__mode i {
+  width: 0.45rem;
+  height: 0.45rem;
+  border: 1px solid var(--ice);
+  background: rgba(134, 215, 234, 0.42);
+  transform: rotate(45deg);
+  box-shadow: 0 0 10px rgba(134, 215, 234, 0.65);
+}
+.auto-tour-hud__step { white-space: nowrap; }
+.auto-tour-hud__step strong { color: var(--amber); font-weight: 700; }
+
+.auto-tour-hud__narration { margin-top: 0.65rem; }
+.auto-tour-hud__narration h2 {
+  max-width: 36rem;
+  font-family: "Archivo Black", "Archivo", sans-serif;
+  font-size: 1.18rem;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
+}
+.auto-tour-hud__narration p {
+  max-width: 36rem;
+  margin-top: 0.42rem;
+  color: rgba(240, 241, 238, 0.94);
+  font-size: 0.92rem;
+  line-height: 1.52;
+}
+
+.auto-tour-hud__timeline {
+  margin-top: 0.72rem;
+  color: var(--dim);
+  font-size: 0.52rem;
+}
+#autoTourPhase {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--amber);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#autoTourTime { flex: 0 0 auto; }
+.auto-tour-hud__progress {
+  position: relative;
+  height: 2px;
+  margin-top: 0.38rem;
+  overflow: hidden;
+  background: rgba(232, 228, 218, 0.16);
+}
+.auto-tour-hud__progress span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--tour-progress);
+  background: var(--amber);
+  box-shadow: 0 0 8px rgba(227, 155, 45, 0.72);
+  transition: width 0.18s linear;
+}
+
+.auto-tour-hud__actions { margin-top: 0.68rem; }
+.auto-tour-hud__restart {
+  color: rgba(139, 149, 160, 0.9);
+  font-size: 0.5rem;
+  white-space: nowrap;
+}
+.auto-tour-hud__restart kbd {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.4rem;
+  min-height: 1.4rem;
+  margin-left: 0.2rem;
+  padding-inline: 0.25rem;
+  border: 1px solid rgba(134, 215, 234, 0.4);
+  border-radius: 4px;
+  color: var(--ice);
+  background: rgba(9, 12, 16, 0.45);
+  font: inherit;
+}
+.auto-tour-hud__buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+}
+#autoTourTakeControl,
+#autoTourVoice {
+  min-height: 2.25rem;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--ice);
+  border-radius: 999px;
+  color: var(--night);
+  background: var(--ice);
+  font: 650 0.58rem/1 "IBM Plex Mono", ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease, transform 0.12s ease;
+}
+#autoTourTakeControl:hover { color: var(--ice); background: rgba(9, 12, 16, 0.6); }
+#autoTourVoice {
+  min-width: 7.4rem;
+  color: var(--ice);
+  background: rgba(9, 12, 16, 0.64);
+  border-color: rgba(134, 215, 234, 0.58);
+}
+#autoTourVoice[aria-pressed="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.42rem;
+  height: 0.42rem;
+  margin-right: 0.42rem;
+  border-radius: 50%;
+  background: var(--ice);
+  box-shadow: 0 0 8px rgba(134, 215, 234, 0.78);
+}
+#autoTourVoice:hover:not(:disabled) { border-color: var(--amber); color: var(--amber); }
+#autoTourVoice:disabled { opacity: 0.5; cursor: not-allowed; }
+#autoTourTakeControl:active,
+#autoTourVoice:active:not(:disabled) { transform: scale(0.97); }
+#autoTourTakeControl:focus-visible,
+#autoTourVoice:focus-visible,
+#btnAutoTour:focus-visible,
+#btnAutoTourIntro:focus-visible { outline: 2px solid var(--ice); outline-offset: 3px; }
+
+/* Auto mode pares the manual chrome back to one restart shortcut. The module
+   removes this body class on interruption, restoring the complete ranch UI. */
+body.auto-tour-active :is(
+  .labels, .station-chip, .carry-status, .research-guide, .entry-toast,
+  #stationPanel, .hint, .travel-caption, .step-scrubber
+) { display: none !important; }
+body.auto-tour-active .dock {
+  left: auto;
+  right: 18px;
+  transform: none;
+  padding: 0.32rem;
+}
+body.auto-tour-active .dock > :not(#btnAutoTour) { display: none; }
+#btnAutoTour {
+  min-width: auto;
+  padding-inline: 0.82rem;
+  color: var(--ice);
+  border-color: rgba(134, 215, 234, 0.45);
+}
+#btnAutoTour[hidden] { display: none !important; }
+body.auto-tour-active #btnAutoTour {
+  color: var(--night);
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+@keyframes auto-tour-hud-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auto-tour-hud { animation: none; }
+  .auto-tour-hud__progress span,
+  #autoTourTakeControl,
+  #autoTourVoice { transition: none; }
+}
+
+@media (max-width: 640px) {
+  .auto-tour-hud {
+    left: 10px;
+    right: 10px;
+    bottom: 70px;
+    width: auto;
+    max-height: 42svh;
+    overflow-y: auto;
+    padding: 0.72rem 0.78rem 0.68rem 0.88rem;
+  }
+  .auto-tour-hud__narration { margin-top: 0.5rem; }
+  .auto-tour-hud__narration h2 { font-size: 0.92rem; }
+  .auto-tour-hud__narration p { font-size: 0.8rem; line-height: 1.46; }
+  .auto-tour-hud__timeline { margin-top: 0.55rem; }
+  .auto-tour-hud__actions { margin-top: 0.56rem; }
+  #autoTourTakeControl,
+  #autoTourVoice { min-height: 2.75rem; padding-inline: 0.72rem; }
+  #autoTourVoice { min-width: 6.8rem; }
+  body.auto-tour-active .dock { right: 10px; bottom: 10px; }
+  body.auto-tour-active #btnAutoTour { min-width: 4.5rem; padding-inline: 0.55rem; }
+}
+
+@media (max-height: 520px) and (min-width: 641px) {
+  .auto-tour-hud { max-height: calc(100svh - 92px); overflow-y: auto; }
+  .auto-tour-hud__narration p {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
 }

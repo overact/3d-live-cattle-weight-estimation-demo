@@ -10,6 +10,7 @@
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
 import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
+import { createAutoNavigator } from "./auto-nav.js?v=20260829-spoken-tour-v7";
 import { createChibiCattle } from "../lib/chibi-cattle.js";
 import { createThirdPersonRig, turnToward } from "../lib/third-person-rig.js?v=20260812-steering";
 
@@ -460,6 +461,7 @@ export function initRoam({
   onGuideStation = null,
   onStationEnter = null,
   onStationLeave = null,
+  onManualIntent = null,
   avatar = null
 }) {
   /* any object honouring the chibi-cattle contract can play the calf.
@@ -500,6 +502,13 @@ export function initRoam({
        layout that produced them */
     collideFn: env.collide,
     bounds: { radius: 74 }
+  });
+  const autoNavigator = createAutoNavigator({
+    /* Probe the same collider set used by the physical controller. Reading a
+       candidate point has no scene side effects; it simply tells the pure
+       navigator whether the calf's body would be pushed there. */
+    probe: (x, z, clearance) =>
+      env.collide(x, z, rig.feel.bodyRadius, clearance)
   });
   const trail = buildTrail();
   const ribbon = buildRibbon();
@@ -702,7 +711,8 @@ export function initRoam({
     const p = rig.state.pos;
     const legs = env.stationApproach(i, p.x, p.z);
     legs.push(...frontApproachLegs(i, p.x, p.z));
-    autoTravel = { i, legs, closest: Infinity, stall: 0 };
+    autoNavigator.reset();
+    autoTravel = { i, legs, closest: Infinity, stall: 0, replans: 0 };
     learned.sent = true;
     rig.press("run", true);
     say(`MOO-ving out — 0${i} ${STATIONS[i].name}. ${TRAVEL_SUFFIX[travelIdx++ % TRAVEL_SUFFIX.length]}`, 3.5);
@@ -710,8 +720,22 @@ export function initRoam({
   function cancelAuto() {
     if (!autoTravel) return;
     autoTravel = null;
+    autoNavigator.reset();
     rig.setAutoDir(null);
     rig.press("run", false);
+  }
+
+  /* Director/manual handoff. This deliberately does not teleport, snap, or
+     orbit: taking the controls should continue from the exact pose and camera
+     the automated sequence left on screen. Keep it idempotent because the
+     same physical gesture can be observed by more than one UI layer. */
+  function takeManualControl() {
+    autoTravel = null;
+    autoFace = null;
+    autoNavigator.reset();
+    rig.setAutoDir(null);
+    rig.press("run", false);
+    return active;
   }
 
   /* ---- easter eggs ---- */
@@ -750,36 +774,65 @@ export function initRoam({
     else if (action !== "egg" && action !== "moo") learned.moved = true;
   }
 
+  /* Visitor DOM events pass through here; public QA/director hooks do not.
+     Notify before applying the action so the director can release its own
+     controls first. The callback may synchronously exit roam, hence every
+     caller must honour the returned active state before touching the rig. */
+  function notifyManualIntent(source, action) {
+    onManualIntent?.({ source, action });
+    return active;
+  }
+
   function onKeyDown(e) {
     if (!active || e.target.closest("input, textarea")) return;
     const action = KEYMAP[e.code];
     if (action) {
-      cancelAuto();            // manual steering takes over from auto-run
-      autoFace = null;
+      e.preventDefault();
+      if (!notifyManualIntent("keyboard", action)) return;
+      takeManualControl();     // manual steering takes over from auto-run
       markLearned(action);
       rig.press(action, true);
-      e.preventDefault();
       return;
     }
     if (e.repeat) return;
     const digit = /^(?:Digit|Numpad)([0-8])$/.exec(e.code);
     if (digit) {
+      if (!notifyManualIntent("keyboard", `station-${digit[1]}`)) return;
       travelTo(parseInt(digit[1], 10));
       return;
     }
     switch (e.code) {
-      case "Space": markLearned("jump"); rig.press("jump", true); e.preventDefault(); break;
-      case "KeyE": markLearned("dash"); rig.press("dash", true); break;
-      case "KeyF": fireEgg(); break;
+      case "Space":
+        e.preventDefault();
+        if (!notifyManualIntent("keyboard", "jump")) return;
+        markLearned("jump"); rig.press("jump", true);
+        break;
+      case "KeyE":
+        if (!notifyManualIntent("keyboard", "dash")) return;
+        markLearned("dash"); rig.press("dash", true);
+        break;
+      case "KeyF":
+        if (!notifyManualIntent("keyboard", "egg")) return;
+        fireEgg();
+        break;
       case "KeyM":
+        if (!notifyManualIntent("keyboard", "moo")) return;
         cattle.emote("moo");
         mooSound();
         say(MOOS[mooIdx++ % MOOS.length], 1.6);
         break;
       /* exit keys flip the mode mid-event — stop the event here so main.js's
          later-registered keydown listener doesn't act on the new mode too */
-      case "KeyC": e.stopImmediatePropagation(); onExitRequest("station"); break;
-      case "Escape": e.stopImmediatePropagation(); onExitRequest("overview"); break;
+      case "KeyC":
+        e.stopImmediatePropagation();
+        if (!notifyManualIntent("keyboard", "exit-station")) return;
+        onExitRequest("station");
+        break;
+      case "Escape":
+        e.stopImmediatePropagation();
+        if (!notifyManualIntent("keyboard", "exit-overview")) return;
+        onExitRequest("overview");
+        break;
     }
   }
   function onKeyUp(e) {
@@ -790,22 +843,30 @@ export function initRoam({
   function onWheel(e) {
     if (!active) return;
     e.preventDefault();
+    if (e.deltaY === 0 || !notifyManualIntent("wheel", "zoom")) return;
     rig.zoom(e.deltaY * 0.004);
   }
   /* left-drag orbits the follow camera (main.js tap/orbit handlers are
      dwell/overview-gated, so roam owns the pointer while active) */
-  let dragging = false, dragX = 0, dragY = 0;
+  let dragging = false, dragX = 0, dragY = 0, dragIntentSent = false;
   function onPointerDown(e) {
     if (!active || e.button !== 0 || e.ctrlKey) return;
     dragging = true;
+    dragIntentSent = false;
     dragX = e.clientX;
     dragY = e.clientY;
     try { canvas.setPointerCapture(e.pointerId); } catch { /* fine */ }
   }
   function onPointerMove(e) {
     if (!active || !dragging) return;
+    const dx = e.clientX - dragX, dy = e.clientY - dragY;
+    if (dx === 0 && dy === 0) return;
+    if (!dragIntentSent) {
+      dragIntentSent = true;
+      if (!notifyManualIntent(e.pointerType === "touch" ? "touch" : "pointer", "look")) return;
+    }
     learned.looked = true;
-    rig.orbit(e.clientX - dragX, e.clientY - dragY);
+    rig.orbit(dx, dy);
     dragX = e.clientX;
     dragY = e.clientY;
   }
@@ -892,6 +953,7 @@ export function initRoam({
 
     nearestStationIndex() { return nearestStation().i; },
     travelTo,
+    takeManualControl,
 
     update(dt, t) {
       worldT = t;
@@ -914,16 +976,28 @@ export function initRoam({
             autoTravel.stall = 0;
           }
         } else {
-          rig.setAutoDir({ x: dx / d, z: dz / d });
-          /* straight-line steering can wedge against a prop the waypoints did
-             not anticipate. Hand control back with a word rather than grind
-             into a fence for the rest of the session. */
+          const desired = { x: dx / d, z: dz / d };
+          const steering = autoNavigator.update({
+            dt,
+            position: rig.state.pos,
+            desired,
+            grounded: rig.state.grounded,
+            blocked: rig.state.blocked
+          });
+          rig.setAutoDir(steering.dir);
+          if (steering.action === "jump") rig.press("jump", true);
+
+          /* Progress remains the arrival contract, but a stall now causes a
+             deterministic side replan instead of abandoning the automatic
+             presentation and asking the visitor to finish the route. */
           if (d < autoTravel.closest - 0.35) {
             autoTravel.closest = d;
             autoTravel.stall = 0;
           } else if ((autoTravel.stall += dt) > 3) {
-            cancelAuto();
-            say("Hmf — something's in my way. Steer me round with WASD?", 3.2);
+            autoNavigator.replan(rig.state.pos, desired);
+            autoTravel.closest = d;
+            autoTravel.stall = 0;
+            autoTravel.replans += 1;
           }
         }
       }
@@ -1067,6 +1141,10 @@ export function initRoam({
         nearStation: nearI,
         framing: framing01,
         autoTarget: autoTravel ? autoTravel.i : null,
+        autoLegs: autoTravel ? autoTravel.legs.length : 0,
+        autoReplans: autoTravel ? autoTravel.replans : 0,
+        blocked: st.blocked,
+        autoNav: autoNavigator.qaState,
         /* xz alignment between heading and the near station's exhibit */
         lookDot: (() => {
           if (nearI < 0) return null;

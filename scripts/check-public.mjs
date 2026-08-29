@@ -32,6 +32,25 @@ for (const page of requiredPages) {
   }
 }
 
+const autoTourRanchHtml = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const autoTourRanchMain = fs.readFileSync(path.join(root, "js/world/main.js"), "utf8");
+for (const id of [
+  "btnAutoTour", "btnAutoTourIntro", "autoTourHud", "autoTourStep", "autoTourTitle",
+  "autoTourNarration", "autoTourProgress", "autoTourVoice", "autoTourTakeControl"
+]) {
+  if (!autoTourRanchHtml.includes(`id="${id}"`)) {
+    throw new Error(`Interactive auto tour is missing #${id}`);
+  }
+}
+for (const contract of [
+  "createAutoTour", "createAutoTourVoice", "initAutoTourHud", "onManualIntent", "takeManualControl",
+  'mode === "auto-tour"'
+]) {
+  if (!autoTourRanchMain.includes(contract)) {
+    throw new Error(`Interactive auto tour wiring is missing ${contract}`);
+  }
+}
+
 const textFiles = [];
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -190,6 +209,11 @@ const worldCarry = fs.readFileSync(path.join(root, "js/world/pipeline-carry.js")
 const worldStations = fs.readFileSync(path.join(root, "js/world/stations.js"), "utf8");
 const worldRail = fs.readFileSync(path.join(root, "js/world/rail.js"), "utf8");
 const worldRoam = fs.readFileSync(path.join(root, "js/world/roam.js"), "utf8");
+if (!worldRoam.includes("createAutoNavigator") ||
+    !worldRoam.includes('steering.action === "jump"') ||
+    !worldRoam.includes("autoNavigator.replan")) {
+  throw new Error("Roam auto-travel must jump low obstacles and replan around tall ones");
+}
 const deploymentSim = fs.readFileSync(path.join(root, "js/world/deployment-sim.js"), "utf8");
 const renderLifecycle = fs.readFileSync(path.join(root, "js/world/render-lifecycle.js"), "utf8");
 const deviceTier = fs.readFileSync(path.join(root, "js/lib/device-tier.js"), "utf8");

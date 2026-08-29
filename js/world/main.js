@@ -7,14 +7,17 @@ import { OrbitControls } from "../../vendor/OrbitControls.js";
 import { GLTFLoader } from "../../vendor/GLTFLoader.js";
 import { CSS2DRenderer } from "../../vendor/CSS2DRenderer.js";
 import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { buildEnvironment } from "./environment.js?v=20260823-step05-visible-spin-step08-continuous";
+import { buildEnvironment } from "./environment.js?v=20260829-spoken-tour-v7";
 import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260823-step05-visible-spin-step08-continuous";
 import { needsFullSourceTextures } from "./source-texture-policy.js";
 import { initPanels, makeStationMarkers } from "./panels.js?v=20260823-step05-visible-spin-step08-continuous";
 import { initTravelCaption } from "./travel-caption.js?v=20260813-rgbd-pointcloud";
 import { initStepScrubber } from "./step-scrubber.js?v=20260812-view-routing";
 import { initReaderGuide } from "./reader-guide.js?v=20260812-gantry-trigger";
-import { initRoam } from "./roam.js?v=20260823-step05-visible-spin-step08-continuous";
+import { initRoam } from "./roam.js?v=20260829-spoken-tour-v7";
+import { createAutoTour } from "./auto-tour.js?v=20260829-spoken-tour-v7";
+import { initAutoTourHud } from "./auto-tour-hud.js?v=20260829-spoken-tour-v7";
+import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260829-spoken-tour-v7";
 import { createPipelineCarry } from "./pipeline-carry.js?v=20260823-step05-visible-spin-step08-continuous";
 /* Version the changed world graph together. An old cached pre-bind-pose avatar
    adapter scales a cloned SkinnedMesh to ~1/900 and leaves only its shadow. */
@@ -370,6 +373,17 @@ async function main() {
   const travelCaption = initTravelCaption();
   /* pause/scrub the recon replay while dwelling at 03 / 04 (desktop, non-tour) */
   const stepScrubber = initStepScrubber();
+  /* Interactive auto-tour chrome is separate from the deterministic ?tour=1
+     recorder path. Its callbacks resolve to the state-machine functions below;
+     they cannot fire until the current main() stack has finished initialising. */
+  const autoTourVoice = createAutoTourVoice();
+  const autoTourHud = initAutoTourHud({
+    onTakeControl: () => interruptAutoTour("hud"),
+    onStart: () => startAutoTour(),
+    onToggleVoice: () => autoTourVoice.toggle(autoTour.qaState)
+  });
+  autoTourHud.setAvailable(false);
+  autoTourHud.setVoiceState(autoTourVoice.qaState);
 
   /* ---- roam mode: the free-roam calf (world glue lives in roam.js) ----
      The calf and the ambient herd now share ONE rig — environment.js parses
@@ -414,13 +428,17 @@ async function main() {
     onStationLeave: () => {
       pipelineCarry.reconcileStation(null, worldTime, roam.subject, roam.heading);
     },
+    onManualIntent: ({ source, action } = {}) => {
+      interruptAutoTour(`manual:${source || action || "input"}`);
+    },
     chipEl: document.getElementById("stationChip"),
     hintEl: document.querySelector(".hint"),
     onExitRequest: (kind) => exitRoam(kind)
   });
   roamBtn.addEventListener("click", () => {
     roamBtn.blur();   // keep Space/Enter flowing to the document, not the button
-    if (mode === "roam") exitRoam("station");
+    if (mode === "auto-tour") interruptAutoTour("roam-button");
+    else if (mode === "roam") exitRoam("station");
     else enterRoam();
   });
 
@@ -431,9 +449,10 @@ async function main() {
      not stretch Station 08's advertised 15-second factory pass indefinitely. */
   let stationRuntimeTime = 0;
   let lastStationRuntimeFrameMs = null;
-  let mode = TOUR ? "tour-wait" : "intro";  // intro | travel | dwell | overview | roam | tour
+  let mode = TOUR ? "tour-wait" : "intro";  // intro | travel | dwell | overview | roam | auto-tour | tour
   let worldEntered = false;
   let pendingEntryToast = null;
+  let pendingAutoStart = false;
   let active = -1;                          // station highlighted in UI
   let travel = null;                        // {kind, from, a, b, final, start, dur}
   let lastStation = 0;
@@ -445,6 +464,35 @@ async function main() {
   let approachStation = -1;
   let arrivalStation = -1;
   let arrivalStart = -Infinity;
+  const autoTour = createAutoTour({
+    travelTo: (i) => roam.travelTo(i),
+    press: (action, isDown = true) => roam.press(action, isDown),
+    getRoamState: () => roam.qaState,
+    /* Event-driven completion barrier. Narration resolves on the voice
+       adapter's onend/onerror. Step 08 additionally resolves only after its
+       own deployment simulation has produced the kg result; the director
+       latches both events, so neither has to finish last. */
+    getCompletionState: ({ stepIndex }) => ({
+      narration: !autoTourVoice.qaState.blocking,
+      exhibit: stepIndex !== 8 || !!stations.deploymentState?.weightReady
+    }),
+    cancelTravel: () => roam.takeManualControl(),
+    onState: (state) => {
+      autoTourVoice.handleState(state);
+      autoTourHud.setVoiceState(autoTourVoice.qaState);
+      /* Use the current English narration to warm the next exhibit. Heavy
+         comparison GLBs should not hitch the following physical run. */
+      if (state.type === "phase" && state.phase === "dwell") {
+        const next = (state.stepIndex + 1) % STATIONS.length;
+        requestModelsForStation(next);
+        if (needsFullSourceTextures(next)) startStationTextures();
+      }
+    },
+    onFrame: (frame) => autoTourHud.show({
+      ...frame,
+      voice: autoTourVoice.qaState
+    })
+  });
 
   function revealEntryToast(destination) {
     if (pendingEntryToast !== destination) return;
@@ -707,6 +755,18 @@ async function main() {
 
   function gotoStation(i) {
     if (mode === "tour" || mode === "tour-wait") return;
+    /* A station choice made after T was queued during camera travel is an
+       explicit change of intent. Do not surprise the visitor by starting the
+       tour when this newer navigation settles. */
+    pendingAutoStart = false;
+    /* A dock/panel navigation click is visitor intent too. Keep the calf in the
+       world, end narration, then let the existing readable-side auto-run carry
+       manual mode to the selected exhibit. */
+    if (mode === "auto-tour") {
+      interruptAutoTour("station-navigation");
+      roam.travelTo(i);
+      return;
+    }
     /* leaving roam via any station navigation: drop the calf, arc-travel */
     if (mode === "roam") {
       roam.exit();
@@ -740,11 +800,22 @@ async function main() {
      C and Esc leave roam. */
   function navStation(i) {
     if (mode === "roam") { roam.travelTo(i); return; }
+    if (mode === "auto-tour") {
+      interruptAutoTour("station-navigation");
+      roam.travelTo(i);
+      return;
+    }
     gotoStation(i);
   }
 
   function toggleOverview() {
     if (mode === "tour" || mode === "tour-wait") return;
+    pendingAutoStart = false;
+    if (mode === "auto-tour") {
+      interruptAutoTour("overview");
+      exitRoam("overview");
+      return;
+    }
     if (mode === "roam") { exitRoam("overview"); return; }
     if (mode === "overview") gotoStation(lastStation);
     else startTravel("overview", -1, 1.8);
@@ -776,6 +847,55 @@ async function main() {
     roam.enter(lastStation, worldTime);   // spawn beside the last dwelled station
     revealEntryToast("guided");
   }
+
+  function setAutoTourChrome(on) {
+    document.body.classList.toggle("auto-touring", on);
+    if (!on) autoTourHud.hide();
+  }
+
+  /* Start where the animal really is. The director first uses roam's existing
+     readable-side pathfinder to reach that nearest Step, then begins its timed
+     narration; no teleport or camera cut is introduced by resuming with T. */
+  function startAutoTour() {
+    if (TOUR || window.__worldReady !== true) return false;
+    if (!worldEntered) enterWorld("overview");
+    if (mode === "auto-tour") {
+      autoTour.start(roam.nearestStationIndex());
+      return true;
+    }
+    if (mode === "travel") {
+      pendingAutoStart = true;
+      return true;
+    }
+    if (mode === "dwell" || mode === "overview") enterRoam();
+    if (mode !== "roam") return false;
+
+    pendingAutoStart = false;
+    autoRoam = "spent";
+    hideEntryToast(true);
+    roam.takeManualControl();
+    const nearest = roam.nearestStationIndex();
+    mode = "auto-tour";
+    controls.enabled = false;
+    setRoamChrome(true);
+    setAutoTourChrome(true);
+    autoTour.start(nearest);
+    return true;
+  }
+
+  /* Called before the visitor's input is applied. stop() releases only the
+     director's held movement, so the same keydown then becomes the first frame
+     of manual control at the current cattle position. */
+  function interruptAutoTour(reason = "manual") {
+    if (mode !== "auto-tour" && !autoTour.active) return false;
+    pendingAutoStart = false;
+    autoTour.stop(reason);
+    setAutoTourChrome(false);
+    if (mode === "auto-tour") mode = "roam";
+    setRoamChrome(roam.active);
+    return true;
+  }
+
   function exitRoam(kind) {
     if (mode !== "roam") return;
     if (kind === "overview") {
@@ -892,12 +1012,22 @@ async function main() {
       applyTour(tourTime);
     } else {
       worldTime += dt;
+      /* T pressed during a rail move queues the handoff instead of snapping the
+         camera or spawning the calf mid-air. Begin on the first settled frame. */
+      if (pendingAutoStart && (mode === "dwell" || mode === "overview")) {
+        pendingAutoStart = false;
+        startAutoTour();
+      }
       /* the calf lets itself in, the frame after the station settles */
       if (autoRoam === "armed") {
         autoRoam = "spent";
         if (mode === "dwell") enterRoam();
       }
       if (mode === "travel") updateTravel();
+      else if (mode === "auto-tour") {
+        roam.update(dt, worldTime);
+        autoTour.update(dt);
+      }
       else if (mode === "roam") roam.update(dt, worldTime);
       else if (mode === "dwell") {
         /* right-drag pan stays near the exhibit while allowing wider inspection */
@@ -945,11 +1075,14 @@ async function main() {
     durationSeconds: timeline.duration,
     seekSeconds(s) {
       /* the recorder may seek from any interactive state — drop the calf */
-      if (mode === "roam") {
+      if (autoTour.active) autoTour.stop("recorder-seek");
+      if (mode === "roam" || mode === "auto-tour") {
         roam.exit();
         pipelineCarry.setEnabled(false);
         setRoamChrome(false);
       }
+      pendingAutoStart = false;
+      setAutoTourChrome(false);
       clearWorldTargetFeedback();
       /* and drop the scrubber: a scrubbed pause must not ride into the
          recorder's clock (it froze station 03 for a whole tour dwell) */
@@ -970,7 +1103,10 @@ async function main() {
       lastStationRuntimeFrameMs = null;
     },
     get mode() { return mode; },
-    get station() { return mode === "dwell" ? lastStation : active; },
+    get station() {
+      if (mode === "auto-tour") return autoTour.qaState.stepIndex;
+      return mode === "dwell" ? lastStation : active;
+    },
     get worldTime() { return worldTime; },
     /* QA hooks */
     get rendering() { return renderLifecycle.isRunning; },
@@ -1086,6 +1222,17 @@ async function main() {
       teleport: (x, z, heading) => roam.teleport(x, z, heading),
       goto: (i) => roam.travelTo(i),
       get state() { return roam.qaState; }
+    },
+    autoTour: {
+      start: () => startAutoTour(),
+      takeControl: (reason = "qa") => interruptAutoTour(reason),
+      get state() {
+        return {
+          ...autoTour.qaState,
+          hud: autoTourHud.qaState,
+          voice: autoTourVoice.qaState
+        };
+      }
     }
   };
   window.__worldReady = false;
@@ -1425,6 +1572,7 @@ async function main() {
   btnExplore.disabled = false;
   renderOpeningGuide(openingGuideStep);
   window.__worldReady = true;
+  autoTourHud.setAvailable(!TOUR);
   /* Keep the first viewport inside the Three.js world: the live ranch renders
      behind the route choice instead of presenting an unrelated static page. */
   if (!TOUR) renderLifecycle.start();

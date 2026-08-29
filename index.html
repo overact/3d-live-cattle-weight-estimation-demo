@@ -7,7 +7,7 @@
     <title>Agreement Ranch | Interactive Multi-View 3D Reconstruction</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="stylesheet" href="assets/fonts/fonts.css">
-    <link rel="stylesheet" href="css/world.css?v=20260823-open-world-polish">
+    <link rel="stylesheet" href="css/world.css?v=20260829-spoken-tour-v7">
     <link rel="stylesheet" href="css/global-nav.css">
   </head>
   <body>
@@ -34,12 +34,47 @@
       </span>
     </div>
 
-    <div class="dock ui" aria-label="Station navigation">
+    <div class="dock ui" aria-label="Ranch navigation">
       <button class="hud-mono" id="btnPrev" type="button" aria-label="Previous station">←</button>
       <span id="dots" aria-label="Stations"></span>
       <button class="hud-mono" id="btnNext" type="button" aria-label="Next station">→</button>
       <button class="hud-mono" id="btnRoam" type="button" aria-label="Free-roam the ranch as a calf" title="Free-roam (C)">🐮</button>
+      <button class="hud-mono" id="btnAutoTour" type="button"
+        aria-label="Start the English narrated automatic tour. Keyboard shortcut T."
+        title="English narrated automatic tour (T)" hidden>AUTO EN · T</button>
     </div>
+
+    <section id="autoTourHud" class="auto-tour-hud ui" aria-label="Automatic field tour narration"
+      aria-hidden="true" hidden>
+      <header class="auto-tour-hud__header hud-mono">
+        <span class="auto-tour-hud__mode"><i aria-hidden="true"></i>ENGLISH VOICE TOUR</span>
+        <span class="auto-tour-hud__step">STEP <strong id="autoTourStep">00</strong> / 08</span>
+      </header>
+
+      <div id="autoTourAnnounce" class="auto-tour-hud__narration"
+        role="status" aria-live="polite" aria-atomic="true">
+        <h2 id="autoTourTitle">Welcome to Agreement Ranch</h2>
+        <p id="autoTourNarration">Follow one animal from three RGB views to a validated weight estimate.</p>
+      </div>
+
+      <div class="auto-tour-hud__timeline hud-mono">
+        <span id="autoTourPhase">INTRODUCTION</span>
+        <time id="autoTourTime">00:00 ELAPSED</time>
+      </div>
+      <div id="autoTourProgress" class="auto-tour-hud__progress" role="progressbar"
+        aria-label="Automatic tour progress" aria-valuemin="0" aria-valuemax="100"
+        aria-valuenow="0" aria-valuetext="0 percent complete">
+        <span aria-hidden="true"></span>
+      </div>
+
+      <footer class="auto-tour-hud__actions hud-mono">
+        <span class="auto-tour-hud__buttons">
+          <button id="autoTourVoice" type="button" aria-pressed="true">VOICE ON</button>
+          <button id="autoTourTakeControl" type="button">TAKE CONTROL</button>
+        </span>
+        <span class="auto-tour-hud__restart">RESTART TOUR <kbd>T</kbd></span>
+      </footer>
+    </section>
 
     <p class="hint hud-mono ui">L-DRAG ORBIT · R-DRAG PAN · CTRL+L / SCROLL ZOOM · CLICK EXHIBITS · C ROAM · ESC MAP</p>
     <!-- touch legend: only ever shown on small screens while body.roaming,
@@ -80,6 +115,7 @@
         <div class="intro-actions">
           <button id="btnEnter" class="hud-mono" type="button" disabled>START CALF-GUIDED TRAIL</button>
           <button id="btnExplore" class="hud-mono btn-secondary" type="button" disabled>EXPLORE FREELY</button>
+          <button id="btnAutoTourIntro" class="hud-mono btn-secondary" type="button" disabled>START ENGLISH VOICE TOUR</button>
         </div>
         <a class="intro-paper-link hud-mono" href="paper.html">READ THE PAPER →</a>
         <p class="intro-hint intro-hint--desktop hud-mono">THE AMBER PATH FOLLOWS THE METHOD · CLICK EXHIBITS · 0–8 JUMP · C ROAM · ESC MAP</p>
@@ -132,6 +168,6 @@
 
     <!-- Bump the module URL when the world runtime changes: some static booth
          servers cache ES-module graphs more aggressively than the HTML. -->
-  <script type="module" src="js/world/main.js?v=20260823-step05-visible-spin-step08-continuous"></script>
+  <script type="module" src="js/world/main.js?v=20260829-spoken-tour-v7"></script>
   </body>
 </html>

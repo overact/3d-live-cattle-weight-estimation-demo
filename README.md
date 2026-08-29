@@ -8,11 +8,21 @@ Quick access: [Ranch](https://overact.github.io/3d-live-cattle-weight-estimation
 
 ## Explore
 
-- **Ranch** (`index.html`) — a guided walkthrough of the full evidence pipeline.
+- **Ranch** (`index.html`) — a guided walkthrough of the full evidence pipeline, including an optional voice-paced cattle-led auto tour.
 - **Agreement 3D** (`agreement.html`) — an interactive explorer for the recorded Stage-1 cross-view agreement field.
 - **Paper** (`paper.html`) — the companion manuscript, evidence scope, links, and current citation.
 
 The earlier Overview and Film pages are intentionally not included in this public repository or its deployment.
+
+## Interactive auto tour
+
+Press **T** or the **AUTO EN** control to begin a continuously looping English presentation. The cattle runs through Steps 00–08 and presents the paper's RGB-to-3D-to-weight story with prominent English subtitles and browser voice-over. The tour is event-driven rather than timed: physical arrival starts a Step, narration completion releases it, and the deployment Step also waits for its own kg-result event. The HUD voice control can mute or replay the current Step narration.
+
+Automatic travel probes the same physical colliders used by the cattle controller. It jumps fences that fit below the authored clearance, steers around taller obstacles, and replans rather than dropping the visitor into manual control when a route stalls.
+
+Any movement key, jump, dash, station number, drag on the ranch scene, or wheel zoom immediately hands control back at the current cattle position. Press **T** again to select the nearest Step, run there, and resume the automatic explanation from that point. **TAKE CONTROL** in the tour caption provides the same interruption without requiring a movement input.
+
+The visitor-facing auto tour is independent of the deterministic `?tour=1` capture route, which remains available for recorder and fixed-step QA workflows.
 
 ## Research status
 

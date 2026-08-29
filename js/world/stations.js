@@ -5,7 +5,7 @@
 import * as THREE from "../../vendor/three.module.js";
 import { ConvexGeometry } from "../../vendor/ConvexGeometry.js";
 import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260823-step05-visible-spin-step08-continuous";
+import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260829-spoken-tour-v7";
 import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
 import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260812-view-routing";
 import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js?v=20260823-proxy-lod";

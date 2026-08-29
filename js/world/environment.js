@@ -1124,6 +1124,20 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
       if (within && e.station !== i) exits.push(e.mouth);        // walk out first
       else if (!within && e.station === i) entries.push(e.mouth); // then walk in
     }
+    /* Station 01's readable front-stop is just outside its west gate. From
+       there, a direct line to the rest of the pipeline cuts straight through
+       the pen and meets the closed east rail. Walk around the south corners
+       instead. This also gives a calf that really is inside the pen a complete
+       exit route: west mouth -> south-west -> south-east -> destination. */
+    const nearCapture =
+      fromX > S1.x - 8 && fromX < S1.x + 6 &&
+      fromZ > S1.z - 7 && fromZ < S1.z + 7;
+    const captureDeparture = i > 1 && nearCapture
+      ? [
+          { x: S1.x - 5.6, z: S1.z - 5.6 },
+          { x: S1.x + 5.6, z: S1.z - 5.6 }
+        ]
+      : [];
     /* The path-side accent between 04 and 05 deliberately follows the glowing
        curve, but a calf aims at station centres in a straight line. Route round
        its south-east end in either direction instead of wedging on the rail. */
@@ -1131,7 +1145,7 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
       (i === 5 && fromX > 20 && fromZ > -10)
       || (i === 4 && fromX < 20 && fromZ < -10);
     const openPasture = skirtsCompareFence ? [{ x: 28, z: -10 }] : [];
-    return [...exits, ...openPasture, ...entries];
+    return [...exits, ...captureDeparture, ...openPasture, ...entries];
   }
 
   return {
