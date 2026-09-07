@@ -21,7 +21,7 @@ const GUIDE = [
   },
   {
     question: "Where does cross-view agreement act?",
-    proof: "Per-view updates are weighted inside Stage 1; Stage 2 refines the shared structure across views."
+    proof: "Compare updates → measure agreement → weight and fuse. Used in both stages; the colored field shows Stage 1."
   },
   {
     question: "Does the 3D representation change the weight result?",
@@ -29,7 +29,7 @@ const GUIDE = [
   },
   {
     question: "How does geometry become a feature vector?",
-    proof: "The world overlay illustrates the paper's geometric, shape, percentile, density, and statistical groups."
+    proof: "Dimensions and shape → 11 regressors → Ridge combination → kilograms. Open DETAILS to select a feature group."
   },
   {
     question: "What result is actually supported?",

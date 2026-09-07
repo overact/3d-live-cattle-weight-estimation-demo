@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createAutoTourVoice } from "../js/world/auto-tour-voice.js?v=20260829-spoken-tour-v7";
+import { createAutoTourVoice } from "../js/world/auto-tour-voice.js?v=20260907-ranch-drive-v6";
 
 class FakeUtterance {
   constructor(text) { this.text = text; }
@@ -64,3 +64,42 @@ assert.equal(unavailable.qaState.available, false);
 assert.equal(unavailable.toggle(dwell).enabled, false);
 
 console.log("English auto-tour voice verified: arrival speech, dedupe, mute, interruption.");
+
+let clock = 0;
+let latest;
+const failingVoice = createAutoTourVoice({
+  now: () => clock, Utterance: FakeUtterance,
+  synth: { getVoices: () => [], cancel() {}, speak(u) { latest = u; u.onerror({ error: "synthesis-failed" }); } }
+});
+failingVoice.handleState(dwell);
+assert.equal(failingVoice.qaState.captionMode, true);
+assert.equal(failingVoice.qaState.complete, false, "speech failure must allow time to read");
+clock = failingVoice.qaState.readingMs + 1;
+assert.equal(failingVoice.qaState.complete, true);
+failingVoice.handleState({ ...dwell, stepIndex: 1 });
+assert.equal(failingVoice.qaState.complete, false);
+const stale = latest;
+failingVoice.handleState({ ...dwell, stepIndex: 2 });
+stale.onend();
+assert.equal(failingVoice.qaState.complete, false, "stale onend cannot complete the next stop");
+failingVoice.toggle();
+assert.equal(failingVoice.qaState.complete, false, "muting must not immediately skip a caption");
+clock += failingVoice.qaState.readingMs + 1;
+assert.equal(failingVoice.qaState.complete, true);
+
+const noVoice = createAutoTourVoice({ synth: null, Utterance: null, now: () => clock });
+noVoice.handleState(dwell);
+assert.equal(noVoice.qaState.complete, false);
+clock += noVoice.qaState.readingMs + 1;
+assert.equal(noVoice.qaState.complete, true);
+
+const stuckVoice = createAutoTourVoice({
+  now: () => clock, Utterance: FakeUtterance,
+  synth: { getVoices: () => [], cancel() {}, speak() {} }
+});
+stuckVoice.handleState(dwell);
+clock += 5100;
+assert.equal(stuckVoice.qaState.lastError, "speech-timeout");
+clock += stuckVoice.qaState.readingMs;
+assert.equal(stuckVoice.qaState.complete, true);
+console.log("Voice fallback verified: readable captions, watchdog, muted/no-voice pacing, stale callback isolation.");

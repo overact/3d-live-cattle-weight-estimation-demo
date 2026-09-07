@@ -4,7 +4,7 @@
 
 Quick access: [Ranch](https://overact.github.io/3d-live-cattle-weight-estimation-demo/) · [Agreement 3D](https://overact.github.io/3d-live-cattle-weight-estimation-demo/agreement.html) · [Paper](https://overact.github.io/3d-live-cattle-weight-estimation-demo/paper.html)
 
-**Agreement Ranch** is an interactive Three.js companion to *Agreement-Driven Multi-View 3D Reconstruction for Live Cattle Weight Estimation*. It turns the paper's RGB-to-3D-to-weight pipeline into a spatial walkthrough: follow matched left, right, and top views through segmentation, single-view reconstruction, agreement-driven multi-view fusion, geometric feature extraction, and downstream live-weight evaluation.
+**Agreement Ranch** is an interactive Three.js companion to *Agreement-Driven Multi-View 3D Reconstruction for Live Cattle Weight Estimation*. Follow matched left, right, and top views through segmentation, agreement-driven multi-view fusion, geometric feature extraction, and downstream live-weight evaluation. Single-view reconstruction (03) and method comparison (05) are optional evidence stops, not prerequisites for the main pipeline.
 
 ## Explore
 
@@ -16,13 +16,33 @@ The earlier Overview and Film pages are intentionally not included in this publi
 
 ## Interactive auto tour
 
-Press **T** or the **AUTO EN** control to begin a continuously looping English presentation. The cattle runs through Steps 00–08 and presents the paper's RGB-to-3D-to-weight story with prominent English subtitles and browser voice-over. The tour is event-driven rather than timed: physical arrival starts a Step, narration completion releases it, and the deployment Step also waits for its own kg-result event. The HUD voice control can mute or replay the current Step narration.
+All three exhibition entrances arrive at **Step 00 with a manually controlled calf**. The English-voice entrance prepares the same playable starting point; press **T** / **AUTO EN** in the world to begin a continuously looping English presentation through Steps 00–08. Physical arrival starts each Step; departure waits for narration, exhibit playback, and any artifact handoff to finish. Muted, unavailable, or stalled browser speech falls back to a word-count-based subtitle reading interval. The deployment Step also waits for its kg-result event. The HUD voice control can mute or replay the current Step narration.
+
+Station details start collapsed and open on demand. Desktop framing leaves room for an open inspector, while mobile controls wrap to keep navigation accessible. During a focused presentation, neighboring exhibits are hidden to reduce visual clutter and rendering work.
+
+Surface models use display-only quadric-decimated GLBs (about 60,000 triangles each); source GLBs are unchanged. Add `?detail=full` to inspect original surface geometry. RGB+D keeps its native point samples. Display geometry and normalized feature overlays are presentation assets, not replacements for research measurements. Rebuild display assets with `python scripts/build-display-models.py` in an environment containing NumPy, trimesh, and Open3D; run `npm run verify` for regression and asset checks.
+
+TRELLIS2's texture-seam vertices are welded after texture-to-linear-color baking and before decimation. This prevents disconnected texture islands from becoming sparse fragments; source geometry remains available unchanged in full-detail mode.
 
 Automatic travel probes the same physical colliders used by the cattle controller. It jumps fences that fit below the authored clearance, steers around taller obstacles, and replans rather than dropping the visitor into manual control when a route stalls.
 
-Any movement key, jump, dash, station number, drag on the ranch scene, or wheel zoom immediately hands control back at the current cattle position. Press **T** again to select the nearest Step, run there, and resume the automatic explanation from that point. **TAKE CONTROL** in the tour caption provides the same interruption without requiring a movement input.
+During narration, **0–8** and mouse Step selection redirect the calf without leaving the presentation. The old speech stops, the chosen Step is explained on arrival, and the sequence continues from there. Reselecting a Step replays it. Movement, jump, dash, an intentional scene drag, wheel zoom, or **TAKE CONTROL** still hand control back explicitly. Press **T** to resume narration from the nearest Step.
 
 The visitor-facing auto tour is independent of the deterministic `?tour=1` capture route, which remains available for recorder and fixed-step QA workflows.
+
+## Gaming mode — Agreement Sprint
+
+Choose **GAMING MODE** on the opening screen or ranch dock. Race a 282 m trail through the actual ranch layout, with station landmarks and an open-world minimap. Both rivals run at 85% of their previous speed: 26/0.85 ≈ 30.6s and 31/0.85 ≈ 36.5s. Collect seven gates in order: left view, right view, top view, SAM3 masks, agreement fusion, shape features, and the weight-ensemble finish. View thumbnails become masks as the lap progresses.
+
+Use **WASD / arrows** to move, **Shift** to run, **Space** to jump and **E** to dash. Thirteen obstacles include rails, hay bales and moving noise blocks; a hit adds 2s and briefly slows the calf. Leaving the trail also slows movement. Collect one held item at a time; **Q** or the item button activates a 3.5s speed boost, a one-hit mask shield, or a −3s clock bonus. Fusion adds a separate −2s bonus. After collecting the first six checkpoints, enter the black-and-white finish area from any direction; a missed line can be recovered by returning to it. The limit is 100s. Live position is physical progress; final ranking compares adjusted times. **P** pauses, **R** restarts, and **Esc** restores the pre-race ranch position. Touch controls are available. Leaving the browser pauses the clock and sound; resume explicitly.
+
+Press **Space or Enter** on the race briefing to start, or on the pause/results panel to resume/replay. Space remains jump during a live race; holding the start key through the countdown does not trigger a jump. Race steering is calf-relative, independent of camera follow: tap for a small correction, hold to ramp smoothly to full turning rate over 0.3s, and release to stop turning immediately. Reversing starts a fresh gentle correction. Free-roam and narrated-tour controls are unchanged.
+
+The next ordinary checkpoint auto-collects within 6 m, including a fast pass through that radius. You do not need to pass precisely through its arch, and the calf is never pulled off course. The first six checkpoints still collect in order; the final checkerboard uses its separate finish-area rule.
+
+Soft looping ranch music and synthesized countdown, hoofbeat, jump, pickup, hit and finish sounds start only after a user gesture. The persistent SOUND button mutes both music and effects; pause and exit silence them, and music stops scheduling at the results screen. No audio downloads are needed. The browser stores the best time for this course version and mute preference only. Rival method names, medals and item effects are playful analogies, not scientific rankings or inference. Pure rules are covered by `npm run verify`; track, rival and HUD objects are reused across replays.
+
+The single- and multi-RGB trace displays retain the recorded Gaussian centres and predicted colors. Stage-2 splats now track framebuffer size and lens zoom, with area-preserving low-tier sampling and slightly fuller coverage. This fixes display-induced sparsity; it does not invent mesh surfaces or recover geometry absent from the source reconstruction.
 
 ## Research status
 

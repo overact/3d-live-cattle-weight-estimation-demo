@@ -1,0 +1,106 @@
+/* The race HUD reserves the centre for driving. Briefing/results are modal
+   states; objective, clock and controls stay on the edges during a lap. */
+.intro-race-link { display: block; margin: 1rem 0 0.5rem; padding: 0; border: 0;
+  color: var(--amber); background: none; cursor: pointer; font-size: 0.66rem; letter-spacing: 0.1em; }
+.intro-race-link:disabled { opacity: 0.45; cursor: wait; }
+#btnRace { color: var(--amber); border-color: rgba(227,155,45,.35); padding-inline: .7rem; }
+.race-hud[hidden], .race-hud [hidden] { display: none !important; }
+.race-hud { --race-surface: rgba(17,26,28,.91); --race-edge: rgba(241,220,179,.2); --race-muted: #c3c6ba;
+  position: fixed; inset: 0; z-index: 80; pointer-events: none; color: #fff4dc; }
+.race-hud button { pointer-events: auto; cursor: pointer; font: inherit; color: inherit; }
+.race-hud button:focus-visible, .intro-race-link:focus-visible { outline: 2px solid var(--ice); outline-offset: 4px; }
+body.race-active :is(.dock,.station-chip,.carry-status,.research-guide,.entry-toast,.hint,.labels,
+  #stationPanel,.step-scrubber,.travel-caption,.calf-bubble,.global-nav) { display: none !important; }
+.race-topbar { position: absolute; top: 25px; left: 28px; right: 28px; display: flex; justify-content: space-between; align-items: start; }
+.race-brand > span { color: var(--amber); font-size: .6rem; letter-spacing: .16em; }
+.race-brand { text-shadow: 0 2px 12px #000; }
+.race-brand h1 { font: 1rem "Archivo Black",sans-serif; margin: .35rem 0 0; line-height: 1.2; }
+.race-brand em { color: var(--amber); font-style: normal; font-size: inherit; }
+.race-clock { text-align: right; display: flex; flex-direction: column; gap: .3rem; padding: .65rem 1rem; background: var(--race-surface); border: 1px solid var(--race-edge); border-radius: 14px; }
+.race-clock strong { font: 2.2rem "Archivo Black",sans-serif; font-variant-numeric: tabular-nums; }
+.race-clock span { color: var(--race-muted); font-size: .55rem; }
+.race-objective { position: absolute; top: 92px; left: 28px; width: min(270px, calc(100vw - 160px)); padding: .85rem 1rem;
+  border: 1px solid var(--race-edge); border-top: 2px solid var(--amber); border-radius: 4px 14px 14px 14px; background: var(--race-surface); }
+.race-objective > span { display: flex; justify-content: space-between; color: var(--amber); font-size: .58rem; letter-spacing: .08em; }
+.race-objective h2 { font: 1.05rem "Archivo Black",sans-serif; margin: .5rem 0 .25rem; }
+.race-objective p { font-size: .72rem; line-height: 1.5; margin: 0; color: var(--race-muted); }
+.race-objective small { display: block; margin-top: .5rem; font-size: .53rem; color: var(--ice); }
+.race-inventory { display: flex; align-items: center; gap: 5px; margin-top: .65rem; }
+.race-inventory figure { margin: 0; position: relative; width: 45px; opacity: .25; border: 1px solid #66737a; transition: opacity .2s,border-color .2s; }
+.race-inventory figure.collected { opacity: 1; border-color: var(--amber); }
+.race-inventory img { width: 100%; height: 30px; display: block; object-fit: cover; }
+.race-inventory figcaption { position: absolute; bottom: 0; right: 0; padding: 0 3px; background: #111; font: .5rem monospace; }
+.race-inventory > span { font-size: .45rem; color: var(--ice); max-width: 8ch; margin-left: 4px; }
+.race-progress { height: 3px; background: #45525a; margin-top: .8rem; }
+.race-progress i { display: block; height: 100%; background: var(--amber); width: 0; transition: width .3s ease; }
+.race-minimap { position: absolute; top: 130px; right: 28px; width: 132px; height: 136px; background: var(--race-surface); border: 1px solid var(--race-edge); border-radius: 14px; }
+.race-map-gate { fill: #f2d09b; }
+.race-panel { pointer-events: auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: min(540px,calc(100vw - 36px)); max-height: calc(100svh - 140px); overflow: auto;
+  padding: 2.25rem; background: linear-gradient(145deg,#26342f,#111b1e 65%); border: 1px solid #b09a6559;
+  border-top: 4px solid var(--amber); border-radius: 6px 24px 24px 24px; box-shadow: 0 24px 90px #0008; z-index: 3; }
+.race-panel .race-eyebrow { color: var(--amber); font-size: .6rem; letter-spacing: .12em; margin-top: 0; }
+.race-panel h2 { font: clamp(1.8rem,4vw,2.8rem)/1.06 "Archivo Black",sans-serif; letter-spacing: -.04em; white-space: pre-line; margin: .8rem 0 1rem; }
+.race-panel p { font-size: .9rem; line-height: 1.6; }
+.race-panel .race-controls { display: grid; grid-template-columns: 1fr 1fr; gap: .7rem; color: var(--race-muted); font-size: .72rem; margin: 1.4rem 0; padding-block: 1rem; border-block: 1px solid var(--race-edge); }
+.race-controls span { display: flex; align-items: center; gap: .6rem; }
+.race-controls kbd { padding: .25rem .4rem; border: 1px solid #778077; border-bottom-width: 2px; border-radius: 5px; font: .6rem monospace; color: #fff4dc; min-width: 2rem; text-align: center; }
+.race-panel > button { width: 100%; background: var(--amber); color: #151716; border: none; padding: 1rem 1.4rem; border-radius: 10px; font-weight: 800; letter-spacing: .06em; }
+.race-panel .race-start-hint { margin: .65rem 0 0; text-align: center; font-size: .6rem; letter-spacing: .12em; color: #e3c58e; }
+.race-panel > button:hover { background: #f3b64b; transform: translateY(-1px); }
+.race-panel small { display: block; margin-top: 1rem; text-align: center; color: var(--race-muted); font-size: .6rem; line-height: 1.4; }
+.race-count { position: absolute; top: 45%; left: 50%; transform: translate(-50%,-50%); font: 8rem "Archivo Black",sans-serif; color: var(--amber); text-shadow: 0 4px 24px #000; }
+.race-status { position: absolute; top: 22%; left: 50%; transform: translate(-50%,-8px); width: max-content; max-width: min(440px,calc(100vw - 32px));
+  text-align: center; font-size: .7rem; line-height: 1.5; padding: .65rem 1rem; background: #14211f; border: 1px solid #9ed2a4;
+  border-radius: 6px; opacity: 0; transition: opacity .16s,transform .16s; }
+.race-status.show { opacity: 1; transform: translate(-50%,0); }
+.race-footer { position: absolute; bottom: 20px; left: 28px; right: 28px; display: flex; justify-content: space-between; align-items: center; gap: .5rem; font-size: .6rem; }
+.race-footer > span { color: var(--amber); padding: .65rem; background: #111a20d9; border-radius: 4px; }
+.race-footer > div { display: flex; gap: .4rem; }
+.race-footer button { min-height: 44px; padding: .7rem .85rem; background: var(--race-surface); border: 1px solid var(--race-edge); border-radius: 10px; }
+.race-footer button:hover { border-color: var(--amber); }
+.race-touch { display: none; }
+.race-itembar { position: absolute; right: 28px; top: 278px; display: flex; flex-direction: column; align-items: end; gap: .6rem; }
+.race-itembar strong { font-size: .65rem; padding: .4rem .6rem; background: #121b22dd; color: var(--ice); }
+.race-itembar button { border: 1px solid var(--amber); border-radius: 5px; padding: .8rem; background: #17252cf2; color: var(--amber); font: .6rem monospace; }
+.race-itembar button:disabled { border-color: #526068; color: #bac6cc; opacity: .65; cursor: default; }
+.race-hud:is([data-phase="ready"],[data-phase="paused"],[data-phase="finished"])::before { content: ""; position: absolute; inset: 0; background: #08141080; backdrop-filter: blur(3px); }
+.race-hud:is([data-phase="ready"],[data-phase="paused"],[data-phase="finished"]) :is(.race-objective,.race-minimap,.race-itembar,.race-touch,.race-count,.race-status) { visibility: hidden; }
+.race-hud[data-phase="ready"] .race-clock { visibility: hidden; }
+.race-hud[data-phase="racing"] .race-objective small { display: none; }
+@media (max-width: 640px) {
+  .dock { grid-template-areas: "prev dots next roam" "tour tour game game"; }
+  #btnRace { grid-area: game; width: 100%; }
+  .race-topbar { top: 14px; left: 16px; right: 16px; }
+  .race-brand h1 { font-size: .75rem; }.race-brand em { display: block; font-size: 1rem; }
+  .race-brand > span { font-size: .48rem; }
+  .race-clock strong { font-size: 1.8rem; }.race-clock span { font-size: .45rem; }
+  .race-objective { left: 16px; top: 90px; width: calc(100vw - 150px); padding: .6rem; }
+  .race-objective h2 { font-size: .85rem; }.race-objective p { font-size: .7rem; }
+  .race-objective small { font-size: .46rem; }.race-minimap { top: 90px; right: 12px; width: 108px; height: 112px; }
+  .race-itembar { top: auto; bottom: 190px; right: 16px; gap: .4rem; }
+  .race-itembar strong { font-size: .55rem; }.race-itembar button { min-height: 44px; padding: .65rem; font-size: .55rem; }
+  .race-panel { padding: 1.25rem; z-index: 3; max-height: calc(100svh - 154px); }
+  .race-panel p { font-size: .8rem; }.race-panel .race-controls { font-size: .64rem; gap: .6rem; }
+  .race-inventory figure { width: 32px; }.race-inventory img { height: 23px; }
+  .race-footer { left: 10px; right: 10px; bottom: max(10px,env(safe-area-inset-bottom)); font-size: .48rem; }
+  .race-footer > span { display: none; }.race-footer > div { width: 100%; justify-content: space-between; }
+  .race-footer button { min-height: 40px; padding: .5rem .6rem; }
+  .race-status { top: 36%; font-size: .6rem; }
+}
+@media (max-width: 380px) {
+  .dock { grid-template-areas: "prev next roam" "dots dots dots" "tour game game"; }
+  .race-topbar { left: 12px; right: 12px; }.race-clock { padding: .35rem; }
+  .race-clock strong { font-size: 1.5rem; }.race-panel h2 { font-size: 1.65rem; }
+}
+@media (pointer: coarse) {
+  .race-touch { display: flex; position: absolute; bottom: 70px; left: 16px; right: 16px; align-items: end; justify-content: space-between; }
+  .race-touch button { border: 1px solid #91a9b5; background: #17252cde; color: #fff; width: 46px; height: 46px; border-radius: 12px; touch-action: none; }
+  .race-pad { display: grid; grid-template-columns: repeat(3,46px); grid-template-rows: repeat(2,46px); gap: 3px; }
+  .race-pad [data-race-action="forward"] { grid-column: 2; }.race-pad [data-race-action="left"] { grid-column: 1; grid-row: 2; }
+  .race-pad [data-race-action="back"] { grid-column: 2; grid-row: 2; }.race-pad [data-race-action="right"] { grid-column: 3; grid-row: 2; }
+  .race-touch-actions { display: flex; gap: 6px; }.race-touch-actions button { font-size: .6rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .race-hud * { transition: none !important; }.race-panel > button:hover { transform: none; }
+}

@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import { reconPixelScale, createReconPlayer } from "../js/lib/recon-player.js?v=20260907-ranch-drive-v6";
+const focal=1.920982126971166;
+assert.equal(reconPixelScale(900,focal),1);
+assert.equal(reconPixelScale(1800,focal),2,"DPR doubles point diameter with projected geometry");
+assert.equal(reconPixelScale(900,focal*2),2,"lens zoom must not make the cloud sparse");
+assert.equal(reconPixelScale(450,focal),.5,"smaller canvas must not inflate points");
+const positions=new Float32Array(8*3),rgba=new Uint8Array(8*4).fill(200);
+const payload={positions,steps:1,counts:[8],stages:[0,1],stage2PerVoxel:8,stage2Rgba:rgba};
+const full=createReconPlayer({stepsPayload:payload,stage2Density:8});
+const low=createReconPlayer({stepsPayload:payload,stage2Density:4});
+const size=p=>p.stage2Points.material.uniforms.uSize.value;
+assert.ok(Math.abs(size(low)/size(full)-Math.sqrt(2))<1e-9,"half density retains disc area");
+assert.equal(full.stage2Keep,8);assert.equal(low.stage2Keep,4);
+full.stage2Points.onBeforeRender({getDrawingBufferSize(v){v.set(1800,1800);}},null,{projectionMatrix:{elements:[0,0,0,0,0,focal*2]}});
+assert.equal(full.stage2Points.material.uniforms.uViewportScale.value,4);
+assert.equal(positions.length,24,"source data is not densified or replaced");
+console.log("Recon coverage verified: framebuffer DPR, viewport size, zoom, low-tier area compensation, unchanged trace coordinates.");

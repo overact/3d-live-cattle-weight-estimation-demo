@@ -13,9 +13,9 @@ export const LEGS = [
   "01 → 02 · three RGB views head off to SAM-3 masking",
   "02 → 03 · left enters single-view SAM3D; right + top stay with the calf",
   "03 → 04 · left rejoins the held pair; three masked views continue",
-  "04 → 05 · the multi-view result lines up against three reconstruction rivals",
-  "05 → 06 · winning geometry gives up girth, area, volume",
-  "06 → 07 · measurements step onto the scale — kilograms out",
+  "04 → 05 · compare the multi-view result with four reconstruction baselines",
+  "05 → 06 · follow the agreement model from body shape to features",
+  "06 → 07 · one feature vector → eleven regressors → Ridge → kilograms",
   "07 → 08 · evaluated regression result enters a simulated ranch workflow"
 ];
 
@@ -29,11 +29,11 @@ export const hopCaption = (a, b) =>
 export const IO = [
   null,
   { in: { from: 0, label: "a visitor" },               out: { to: 2, label: "three RGB frames" } },
-  { in: { from: 1, label: "RGB triptych" },            out: { to: 3, label: "masked cattle RGB views" } },
+  { in: { from: 1, label: "RGB triptych" },            out: { to: 4, label: "three masked RGB views" } },
   { in: { from: 2, label: "left masked view · right + top held" }, out: { to: 4, label: "reunited masked RGB triptych" } },
-  { in: { from: 3, label: "three masked RGB views" },  out: { to: 5, label: "multi-view 3D result" } },
+  { in: { from: 2, label: "three masked RGB views" },  out: { to: 6, label: "multi-view 3D result" } },
   { in: { from: 4, label: "multi-view result + four baselines" }, out: { to: 6, label: "chosen agreement model" } },
-  { in: { from: 5, label: "winning cloud" },           out: { to: 7, label: "feature vector" } },
+  { in: { from: 4, label: "agreement model" },         out: { to: 7, label: "feature vector" } },
   { in: { from: 6, label: "features" },                out: { to: 8, label: "evaluated regression result" } },
   { in: { from: 7, label: "evaluated regression result" }, out: { to: null, label: "simulated future workflow" } }
 ];

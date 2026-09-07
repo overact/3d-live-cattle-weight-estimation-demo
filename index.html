@@ -6,8 +6,11 @@
     <meta name="description" content="3D Live Cattle Weight Estimation — an interactive Three.js show demo for agreement-driven multi-view reconstruction.">
     <title>Agreement Ranch | Interactive Multi-View 3D Reconstruction</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="preload" href="assets/fonts/ArchivoBlack-400.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="assets/fonts/Archivo-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="assets/fonts/fonts.css">
-    <link rel="stylesheet" href="css/world.css?v=20260829-spoken-tour-v7">
+    <link rel="stylesheet" href="css/world.css?v=20260907-ranch-drive-v6-ui1">
+    <link rel="stylesheet" href="css/race.css?v=20260907-ranch-drive-v6">
     <link rel="stylesheet" href="css/global-nav.css">
   </head>
   <body>
@@ -42,6 +45,7 @@
       <button class="hud-mono" id="btnAutoTour" type="button"
         aria-label="Start the English narrated automatic tour. Keyboard shortcut T."
         title="English narrated automatic tour (T)" hidden>AUTO EN · T</button>
+      <button class="hud-mono" id="btnRace" type="button" aria-label="Open Agreement Sprint racing game">GAMING MODE</button>
     </div>
 
     <section id="autoTourHud" class="auto-tour-hud ui" aria-label="Automatic field tour narration"
@@ -98,6 +102,50 @@
 
     <aside id="stationPanel" class="ui" aria-live="polite"></aside>
 
+    <section id="raceHud" class="race-hud ui" aria-label="Agreement Sprint racing game" hidden>
+      <header class="race-topbar">
+        <div class="race-brand"><span class="hud-mono">GAMING MODE · ONE LAP</span><h1>AGREEMENT <em>SPRINT</em></h1></div>
+        <div class="race-clock"><strong id="raceTime">0.0s</strong><span id="raceBest" class="hud-mono">SET YOUR FIRST LAP</span></div>
+      </header>
+      <div class="race-objective">
+        <span class="hud-mono">NEXT GATE <b id="raceGate">0 / 7</b></span>
+        <h2 id="raceObjective">LEFT VIEW</h2><p id="raceHint">Collect the left RGB view.</p>
+        <div class="race-progress"><i id="raceProgress"></i></div>
+        <small id="raceGhost" class="hud-mono">RIVALS 30.6 / 36.5s</small>
+        <div class="race-inventory" aria-label="Collected left, right and top views">
+          <figure data-race-view="left"><img src="assets/world/thumbs/rgb_left.webp" alt="Left RGB view"><figcaption>L</figcaption></figure>
+          <figure data-race-view="right"><img src="assets/world/thumbs/rgb_right.webp" alt="Right RGB view"><figcaption>R</figcaption></figure>
+          <figure data-race-view="top"><img src="assets/world/thumbs/rgb_top.webp" alt="Top RGB view"><figcaption>T</figcaption></figure>
+          <span id="raceViewStage" class="hud-mono">COLLECT VIEWS</span>
+        </div>
+      </div>
+      <div class="race-itembar"><strong id="raceRank" class="hud-mono">3 / 3 · POSITION</strong><button id="raceItem" type="button" disabled>ITEM SLOT · COLLECT ON TRAIL</button></div>
+      <svg id="raceMinimap" class="race-minimap" viewBox="0 0 120 124" role="img" aria-label="Open-world ranch map: numbered stations, amber course and player, blue and purple rivals">
+        <text x="8" y="12" fill="#d1dadd" font-size="6">RANCH MAP · +Z ↑</text>
+        <circle id="raceMinimapGhost" r="4" fill="#86d7ea"/><circle id="raceMinimapPlayer" r="4.5" fill="#e39b2d" stroke="#fff" stroke-width="1.5"/>
+        <circle id="raceMinimapRival" r="3" fill="#d6a5ed"/>
+      </svg>
+      <p id="raceStatus" class="race-status hud-mono" role="status" aria-live="polite"></p>
+      <div id="raceCount" class="race-count" aria-live="assertive" hidden>3</div>
+      <section id="racePanel" class="race-panel" aria-label="Race briefing and result">
+        <p class="hud-mono race-eyebrow">AGREEMENT RANCH / THE SPRINT</p>
+        <h2 id="racePanelTitle">THREE VIEWS.<br>ONE FINISH LINE.</h2>
+        <p id="racePanelBody"></p>
+        <div class="race-controls"><span><kbd>W A S D</kbd> Move & steer</span><span><kbd>SHIFT</kbd> Run</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Dash</span><span><kbd>Q</kbd> Use item</span><span><kbd>P</kbd> Pause</span></div>
+        <button id="raceStart" type="button">START RACE →</button>
+        <p class="race-start-hint hud-mono">PRESS SPACE OR ENTER</p>
+        <small>Playful method analogy · no model inference or scientific scoring</small>
+      </section>
+      <div class="race-touch" aria-label="Touch driving controls">
+        <div class="race-pad"><button data-race-action="forward" aria-label="Run forward">↑</button><button data-race-action="left" aria-label="Turn left">←</button><button data-race-action="back" aria-label="Move backward">↓</button><button data-race-action="right" aria-label="Turn right">→</button></div>
+        <div class="race-touch-actions"><button data-race-action="jump">JUMP</button><button data-race-action="dash">DASH</button></div>
+      </div>
+      <footer class="race-footer hud-mono">
+        <span id="raceDash">E · DASH READY</span>
+        <div><button id="raceSound" type="button" aria-pressed="true">SOUND ON</button><button id="racePause" type="button">PAUSE · P</button><button id="raceRestart" type="button">RESTART · R</button><button id="raceExit" type="button">BACK TO RANCH · ESC</button></div>
+      </footer>
+    </section>
+
     <!-- intro overlay: entry gesture + loading/diagnostics surface -->
     <div id="intro">
       <div class="intro-copy">
@@ -106,20 +154,20 @@
         <p class="intro-paper-title">Agreement-Driven Multi-View 3D Reconstruction<br>for Live Cattle Weight Estimation</p>
         <p class="intro-authors">Rabin Dulal · Wenfeng Jia · Lihong Zheng · Jane Quinn</p>
         <p class="intro-sub">
-          Walk the evidence from matched left, right, and top RGB views to a
-          dataset-validated weight estimate. Take control of the calf on the
-          guided route; no scale or depth sensor is required at inference.
+          Trace three matched RGB views through segmentation, reconstruction,
+          and a validated weight estimate—no scale or depth sensor at inference.
         </p>
-        <p class="intro-evidence hud-mono">103 CATTLE · 5-FOLD CV · AGREEMENT: 2.22% MAPE · R² 0.69</p>
+        <p class="intro-evidence hud-mono">103 CATTLE · 5-FOLD CV · 2.22% MAPE · R² 0.69</p>
         <div id="introStatus" class="hud-mono" aria-live="polite">CHECKING WEBGL…</div>
         <div class="intro-actions">
-          <button id="btnEnter" class="hud-mono" type="button" disabled>START CALF-GUIDED TRAIL</button>
-          <button id="btnExplore" class="hud-mono btn-secondary" type="button" disabled>EXPLORE FREELY</button>
-          <button id="btnAutoTourIntro" class="hud-mono btn-secondary" type="button" disabled>START ENGLISH VOICE TOUR</button>
+          <button id="btnExplore" class="hud-mono" type="button" disabled>EXPLORE FREELY</button>
+          <button id="btnEnter" class="hud-mono btn-secondary" type="button" disabled>FOLLOW THE CALF</button>
+          <button id="btnAutoTourIntro" class="hud-mono btn-secondary" type="button" disabled>ENTER · ENGLISH VOICE READY</button>
         </div>
+        <button id="btnRaceIntro" class="intro-race-link hud-mono" type="button" disabled>GAMING MODE · AGREEMENT SPRINT ↗</button>
         <a class="intro-paper-link hud-mono" href="paper.html">READ THE PAPER →</a>
         <p class="intro-hint intro-hint--desktop hud-mono">THE AMBER PATH FOLLOWS THE METHOD · CLICK EXHIBITS · 0–8 JUMP · C ROAM · ESC MAP</p>
-        <p class="intro-hint intro-hint--touch hud-mono">GUIDED STARTS AS THE CALF · TAP STATIONS · DRAG TO LOOK · 🐮 TO ENTER / EXIT</p>
+        <p class="intro-hint intro-hint--touch hud-mono">ALL ENTRANCES START AT STEP 00 WITH YOUR CALF · DRAG TO LOOK · T FOR VOICE TOUR</p>
       </div>
 
       <aside id="openingGuide" class="opening-guide" aria-label="Opening guide" data-step="0">
@@ -138,12 +186,12 @@
           <section class="opening-guide__panel" data-guide-panel="0">
             <p class="opening-guide__index hud-mono">01 · READ THE ROUTE</p>
             <h2>Follow the amber evidence trail.</h2>
-            <p>Stations 00–08 mirror the paper pipeline. Each arrival starts the next hand-off, from three RGB views to an evaluated weight estimate.</p>
+            <p>The ranch maps the paper pipeline. Optional evidence stops: 03 Single-View Reconstruction and 05 Method Comparison.</p>
           </section>
           <section class="opening-guide__panel" data-guide-panel="1" hidden>
             <p class="opening-guide__index hud-mono">02 · TAKE CONTROL</p>
             <h2>Drive the calf—or inspect freely.</h2>
-            <p>The guided trail puts you behind the calf. Move manually or send it straight to a numbered station; choose Explore Freely for the orbitable paper map.</p>
+            <p>Drive the calf, jump to a numbered station, or choose Explore Freely for the orbitable paper map.</p>
             <dl class="opening-guide__keys hud-mono">
               <div><dt>WASD</dt><dd>MOVE</dd></div>
               <div><dt>SHIFT</dt><dd>RUN</dd></div>
@@ -154,7 +202,7 @@
           <section class="opening-guide__panel" data-guide-panel="2" hidden>
             <p class="opening-guide__index hud-mono">03 · WATCH THE HAND-OFF</p>
             <h2>Notice what moves—and what stays.</h2>
-            <p>The calf carries evidence between workcells. At Step 03 only the left photo is submitted; right and top stay with the calf until left returns and the three views reunite.</p>
+            <p>The calf carries evidence between workcells. At Step 03 only the left view travels; all three reunite at Step 04.</p>
           </section>
         </div>
 
@@ -168,6 +216,6 @@
 
     <!-- Bump the module URL when the world runtime changes: some static booth
          servers cache ES-module graphs more aggressively than the HTML. -->
-  <script type="module" src="js/world/main.js?v=20260829-spoken-tour-v7"></script>
+  <script type="module" src="js/world/main.js?v=20260907-ranch-drive-v6"></script>
   </body>
 </html>

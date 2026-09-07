@@ -6,8 +6,8 @@
    transition from claiming reconstruction finished before the trace did. */
 
 import * as THREE from "../../vendor/three.module.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { displayViewUrl, sharedTex } from "./stations.js?v=20260823-step05-visible-spin-step08-continuous";
+import { STATIONS } from "./rail.js?v=20260907-ranch-drive-v6";
+import { displayViewUrl, sharedTex } from "./stations.js?v=20260907-ranch-drive-v6";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;
@@ -50,14 +50,19 @@ export const STATION_RECIPES = Object.freeze({
     method: "feature and weight estimation" })
 });
 
-export const SUBMISSION_STATION = Object.freeze({ 1: 2, 4: 5, 5: 6 });
+export const SUBMISSION_STATION = Object.freeze({ 1: 2, 4: 6, 5: 6 });
 
 export function submissionStationForArtifact(cargoStage, cargoVariant = null) {
-  if (cargoStage === 2) return cargoVariant === "multi-view-next" ? 4 : 3;
+  if (cargoStage === 2) return 4;
   return SUBMISSION_STATION[cargoStage] || null;
 }
 
 export function stationAcceptsArtifact(station, cargoStage, cargoVariant = null) {
+  /* The main method can bypass both comparison exhibits. A partially
+     submitted triptych still cannot enter fusion: all three views must be back. */
+  if (station === 4) return cargoStage === 2 &&
+    ["single-view-next", "multi-view-next"].includes(cargoVariant);
+  if (station === 6) return (cargoStage === 4 || cargoStage === 5) && !cargoVariant;
   const recipe = STATION_RECIPES[station];
   if (!recipe || recipe.inputStage !== cargoStage) return false;
   /* Variant-bearing recipes are deliberately fail-closed: a generic Stage-2

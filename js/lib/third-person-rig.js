@@ -17,6 +17,7 @@
    opts.feel — tune jump arcs and dash punch without touching the logic. */
 
 import * as THREE from "../../vendor/three.module.js";
+import { createRaceSteering } from "./race-steering.js?v=20260907-ranch-drive-v6";
 
 export const DEFAULT_FEEL = {
   walkSpeed: 5.4,        // u/s
@@ -141,6 +142,9 @@ export function createThirdPersonRig({ camera, groundFn = () => 0, collideFn = n
   let jumpBuffered = -1;           // seconds remaining, <0 = none
   let airDashesLeft = F.airDashes;
   let runHeld01 = 0;               // eased run blend for animation
+  let speedMultiplier = 1;
+  let raceSteering=false;
+  const steering=createRaceSteering();
 
   const camTarget = new THREE.Vector3();
   const _fwd = new THREE.Vector3();
@@ -161,7 +165,8 @@ export function createThirdPersonRig({ camera, groundFn = () => 0, collideFn = n
         down.delete(action);
       }
     },
-    releaseAll() { down.clear(); autoDir = null; },
+    releaseAll() { down.clear(); autoDir = null; steering.reset(); },
+    setRaceSteering(on) { raceSteering=on;steering.reset(); },
     /* world-space unit direction to steer toward (null = back to keys) */
     setAutoDir(dir) { autoDir = dir; },
     get camYaw() { return camYaw; },
@@ -187,14 +192,21 @@ export function createThirdPersonRig({ camera, groundFn = () => 0, collideFn = n
     },
     /* 0..1 — how close the character is to an exhibit. The host owns the
        measurement (it knows where the stations are); the rig owns the easing. */
-    setFraming(k) { framingTarget = clamp(k, 0, 1); },
+    setFraming(k, snap = false) { framingTarget = clamp(k, 0, 1); if (snap) framing = framingTarget; },
+    setSpeedMultiplier(k) { speedMultiplier = clamp(k, 0.35, 1.65); },
+    brake() { state.speed = 0; state.speed01 = 0; },
     zoom(delta) {
       camDist = clamp(camDist + delta, F.camMinDistance, F.camMaxDistance);
     },
     teleport(x, z, heading = 0) {
+      steering.reset();
       state.pos.set(x, groundFn(x, z), z);
+      state.groundY = state.pos.y;
       state.heading = heading;
       state.speed = 0;
+      state.speed01 = 0; state.run01 = 0; runHeld01 = 0;
+      state.dashCooldown = 0; state.blocked = false;
+      sinceGrounded = 0; jumpBuffered = -1; airDashesLeft = F.airDashes;
       state.vy = 0;
       state.grounded = true;
       state.jumps = 0;
@@ -259,6 +271,7 @@ export function createThirdPersonRig({ camera, groundFn = () => 0, collideFn = n
     if (down.has("left")) x -= 1;
     if (down.has("right")) x += 1;
     if (!x && !z) return null;
+    if(raceSteering) return {x:Math.sin(state.heading),z:Math.cos(state.heading),backOnly:z<0};
     const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
     return { x: z * sin - x * cos, z: z * cos + x * sin, backOnly: z < 0 && !x };
   }
@@ -299,13 +312,17 @@ export function createThirdPersonRig({ camera, groundFn = () => 0, collideFn = n
     /* ease the station framing before the camera reads it this frame */
     framing += (framingTarget - framing) * Math.min(1, F.camFramingLerp * dt);
 
+    if(raceSteering&&!autoDir){
+      const steer=Number(down.has("left"))-Number(down.has("right"));
+      state.heading+=steering.step(steer,dt,state.grounded?F.turnRate:F.airTurnRate);
+    } else steering.reset();
     const dir = inputVector();
     const running = down.has("run");
     runHeld01 += ((running && dir && !dir.backOnly ? 1 : 0) - runHeld01) * Math.min(1, dt * 8);
 
     /* --- heading chases the input direction (except pure backpedal: turning
        to face the camera while the camera chases heading = spin feedback) --- */
-    if (dir && !dir.backOnly) {
+    if (dir && !dir.backOnly && (!raceSteering||autoDir)) {
       const want = Math.atan2(dir.x, dir.z);
       const rate = autoDir
         ? (state.grounded ? F.autoTurnRate : F.autoAirTurnRate)
@@ -315,7 +332,7 @@ export function createThirdPersonRig({ camera, groundFn = () => 0, collideFn = n
 
     /* --- scalar speed toward target (dash decays through the same path;
        backpedal is a signed negative speed along the unchanged heading) --- */
-    const target = dir ? (dir.backOnly ? -F.walkSpeed * 0.55 : (running ? F.runSpeed : F.walkSpeed)) : 0;
+    const target = dir ? (dir.backOnly ? -F.walkSpeed * 0.55 : (running ? F.runSpeed : F.walkSpeed)) * speedMultiplier : 0;
     const ctl = state.grounded ? 1 : F.airControl;
     if (state.speed < target) state.speed = Math.min(target, state.speed + F.accel * ctl * dt);
     else state.speed = Math.max(target, state.speed - F.decel * ctl * dt);

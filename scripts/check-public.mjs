@@ -131,6 +131,10 @@ const dynamicRuntime = [
   "assets/cases/case_001/models/agreement.glb", "assets/cases/case_001/models/average.glb",
   "assets/cases/case_001/models/entropy.glb", "assets/cases/case_001/models/trellis2.glb",
   "assets/cases/case_001/models/rgbd.glb",
+  "assets/cases/case_001/models/display/agreement.glb",
+  "assets/cases/case_001/models/display/average.glb",
+  "assets/cases/case_001/models/display/entropy.glb",
+  "assets/cases/case_001/models/display/trellis2.glb",
   "assets/cases/case_001/views/display/rgb_left.webp",
   "assets/cases/case_001/views/display/rgb_right.webp",
   "assets/cases/case_001/views/display/rgb_top.webp",
@@ -232,7 +236,7 @@ if (!ranchHtml.includes('<button class="station-chip hud-mono ui"') ||
     !worldMain.includes("let stationRuntimeTime = 0") ||
     !worldMain.includes("frameMs - lastStationRuntimeFrameMs") ||
     !worldMain.includes("onResume: () =>") ||
-    !worldMain.includes('render-lifecycle.js?v=20260823-step05-visible-spin-step08-continuous') ||
+    !worldMain.includes('render-lifecycle.js?v=20260907-ranch-drive-v6') ||
     !renderLifecycle.includes("onResume?.()") ||
     !deviceTier.includes("export class AdaptivePixelRatio") ||
     !threePerf.includes("export class ScreenSizeLod")) {
@@ -250,7 +254,7 @@ if (!worldStations.includes("turntableSpeed = 0.35") ||
 if (!worldRail.includes("activationPoints: [V(-40, 0, 2), V(-40, 0, 13)]") ||
     !worldRoam.includes("stationActivationPoints") ||
     !worldRoam.includes("for (const point of stationActivationPoints[i])") ||
-    !worldRoam.includes("panels.showStation(i, { open: i !== 8 })") ||
+    !worldRoam.includes("panels.showStation(i, { open: false })") ||
     !worldRoam.includes("if (i === 8) faceExhibit(i)") ||
     !worldCarry.includes("if (nextStation === 8)") ||
     !worldCarry.includes("const deploymentActive = proximityStation === 8") ||

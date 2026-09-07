@@ -4,17 +4,17 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { ConvexGeometry } from "../../vendor/ConvexGeometry.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260829-spoken-tour-v7";
-import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
-import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260812-view-routing";
-import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js?v=20260823-proxy-lod";
-import { createDeferredReconPlayer } from "../lib/recon-player.js?v=20260812-virtual-clock";
-import { cameraFlashTexture, createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-visible-spin-step08-continuous";
+import { STATIONS } from "./rail.js?v=20260907-ranch-drive-v6";
+import { FUTURE_RIG_CAPTURE_POINTS } from "./environment.js?v=20260907-ranch-drive-v6";
+import { IO, pad2 } from "./handoff-content.js?v=20260907-ranch-drive-v6";
+import { PIPELINE_BRANCHES, PIPELINE_NODES } from "./pipeline-map.js?v=20260907-ranch-drive-v6";
+import { LightRig, PanelThrottle, ScreenSizeLod } from "../lib/three-perf.js?v=20260907-ranch-drive-v6";
+import { createDeferredReconPlayer } from "../lib/recon-player.js?v=20260907-ranch-drive-v6";
+import { cameraFlashTexture, createCameraFlash } from "../lib/camera-flash.js?v=20260907-ranch-drive-v6";
 import {
   DEPLOYMENT_PERIOD, deploymentOneShotStateAt, deploymentReducedMotionStateAt,
   deploymentStateAt
-} from "./deployment-sim.js?v=20260823-step05-visible-spin-step08-continuous";
+} from "./deployment-sim.js?v=20260907-ranch-drive-v6";
 
 const AMBER = 0xe39b2d;
 const ICE = 0x86d7ea;
@@ -550,6 +550,9 @@ function mountModel(anchor, srcScene, targetLen = 2.5, yaw = 0) {
   return obj;
 }
 
+const SURFACE_LOD_FULL = typeof window !== "undefined"
+  && new URLSearchParams(window.location.search).get("detail") === "full";
+
 function tintModel(obj, color, opacity = 0.45) {
   obj.traverse((o) => {
     if (!o.isMesh || !o.material) return;
@@ -730,7 +733,7 @@ function buildGate(scene, s) {
     ctx.fillText("THE METHOD MAP — THREE CAMERAS TO KILOGRAMS", W / 2, 44);
     ctx.fillStyle = "#aeb7c0";
     ctx.font = `500 19px ${MONO}`;
-    ctx.fillText("RGB  →  SAM3 masks  →  single-view recon  →  multi-view agreement recon  →  features  →  kg", W / 2, 78);
+    ctx.fillText("RGB  →  SAM3 masks  →  agreement reconstruction  →  features  →  ensemble  →  kg", W / 2, 78);
 
     const arrow = (x0, y0, x1, y1, { dashed = false, color = "#e39b2d" } = {}) => {
       const angle = Math.atan2(y1 - y0, x1 - x0);
@@ -924,6 +927,17 @@ function buildGate(scene, s) {
       arrow(x0, nodeY, x1, nodeY);
     }
     PIPELINE_NODES.forEach(drawNode);
+
+    const baseline = PIPELINE_BRANCHES.find(({ id }) => id === "reconstruct");
+    if (baseline?.kind === "evidence") {
+      const segmentX = nodeX.get(baseline.from);
+      arrow(segmentX, nodeY + nodeH / 2 + 4, segmentX, 480, { dashed: true, color: "#86d7ea" });
+      pointCow(segmentX, 548);
+      ctx.fillStyle = "#86d7ea";
+      ctx.font = `500 18px ${MONO}`;
+      ctx.fillText("SINGLE-VIEW BASELINE", segmentX, 620);
+      stationTag(ctx, "reconstruct", segmentX, 650);
+    }
 
     const compare = PIPELINE_BRANCHES.find(({ id }) => id === "compare");
     if (compare?.from === "fusion" && compare.kind === "evidence") {
@@ -1398,7 +1412,7 @@ function buildReconstruct(scene, s, payload, reconSteps, stage2Density = null,
     roCtx.fillStyle = "#0c0f13";
     roCtx.fillRect(0, 0, W, H);
     roCtx.textBaseline = "middle";
-    roCtx.font = `500 30px ${MONO}`;
+    roCtx.font = `500 24px ${MONO}`;
     roCtx.textAlign = "left";
     if (!player?.isReal) {
       const state = player?.loadState || "idle";
@@ -1418,12 +1432,12 @@ function buildReconstruct(scene, s, payload, reconSteps, stage2Density = null,
     roCtx.fillStyle = stage === 1 ? "#e39b2d" : "#86d7ea";
     const name = stage === 1
       ? "STAGE-1 · SPARSE STRUCTURE"
-      : "S1 FROZEN · STAGE-2 · LATENT REFINEMENT";
+      : "STAGE-2 · LATENT REFINEMENT";
     roCtx.fillText(`${name} · STEP ${String(step + 1).padStart(2, "0")}/${steps}`, 24, H / 2 + 1);
     roCtx.fillStyle = "#5c6873";
     roCtx.textAlign = "right";
     roCtx.fillText(
-      `REAL TRACE · DRAW ${player.stage2Keep}/${player.stage2PerVoxel} GAUSSIANS/VOXEL`,
+      `REAL · ${player.stage2Keep}/${player.stage2PerVoxel} GAUSSIANS/VOXEL`,
       W - 24, H / 2 + 1);
     readout.userData.tex.needsUpdate = true;
   };
@@ -1591,6 +1605,7 @@ function buildReconstruct(scene, s, payload, reconSteps, stage2Density = null,
         stage1Visible: player.stage1Points.visible,
         stage2Visible: player.stage2Points.visible,
         stage2RealColor: player.stage2Points.material.uniforms.uHasRealColor.value === 1,
+        viewportScale: player.stage2Points.material.uniforms.uViewportScale.value,
         pointSizes: [
           player.stage1Points.material.uniforms.uSize.value,
           player.stage2Points.material.uniforms.uSize.value
@@ -1902,6 +1917,7 @@ function buildFusion(scene, s, payload, multiviewReconSteps, stage2Density = nul
         stage1Visible: mvPlayer.stage1Points.visible,
         stage2Visible: mvPlayer.stage2Points.visible,
         stage2RealColor: mvPlayer.stage2Points.material.uniforms.uHasRealColor.value === 1,
+        viewportScale: mvPlayer.stage2Points.material.uniforms.uViewportScale.value,
         pointSizes: [
           mvPlayer.stage1Points.material.uniforms.uSize.value,
           mvPlayer.stage2Points.material.uniforms.uSize.value
@@ -2266,7 +2282,7 @@ function buildFeatures(scene, s, payload) {
     const vtag = tagSprite([
       { text: `V_bbox = ${fmt(F.vBBox)} u³`, color: "#e39b2d" },
       { text: `V_hull = ${fmt(hm.volume)} u³`, color: "#86d7ea" },
-      { text: `A_surface = ${fmt(hm.area)} u²`, color: "#86d7ea" }
+      { text: `A_hull = ${fmt(hm.area)} u²`, color: "#86d7ea" }
     ], tagH * 2.6);
     vtag.position.set(ctr[0], ctr[1], F.max[2] + pad * 3.2);
     gr.add(vtag);
@@ -2656,14 +2672,18 @@ function methodPlaque(m) {
     ctx.fillStyle = m.hot ? "#f5d9a8" : "#8b95a0";
     ctx.font = `500 30px ${MONO}`;
     ctx.fillText(`MAPE ${m.mape} · R² ${m.r2}`, W / 2, 116);
+    ctx.fillStyle = m.hot ? "#f5d9a8" : "#68737e";
+    ctx.font = `500 18px ${MONO}`;
+    ctx.fillText(m.key === "rgbd"
+      ? "NATIVE RGB+D POINTS"
+      : SURFACE_LOD_FULL ? "FULL SURFACE · DETAIL MODE" : "DISPLAY LOD · SURFACE VIEW", W / 2, 145);
   });
 }
 
-/* Step-05 stand-in: preserve each source GLB untouched, but keep a deterministic
-   sample of its real vertices as the screen-size LOD silhouette. Low tier also
-   uses the same proxy for one rotating unfocused method at the comparison
-   station. The native RGB+D POINTS primitive is already the measured dataset
-   geometry, so it is never replaced by a proxy or presented as a mesh. */
+/* Preserve each source GLB untouched, but keep a deterministic point silhouette
+   as the existing screen-size proxy. The native RGB+D POINTS primitive is
+   already the measured dataset geometry, so it is never replaced by a proxy
+   or presented as a mesh. */
 function pointProxyForModel(obj, color, budget = 18000) {
   obj.updateMatrixWorld(true);
   const meshes = [];
@@ -2744,7 +2764,6 @@ function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
   /* Roughly one revolution every 18 seconds: visibly turning within a short
      visit, while still slow enough to compare silhouettes and proportions. */
   const turntableSpeed = 0.35;
-  const lowTier = qualityTier === "low";
   METHODS.forEach((m, i) => {
     const x = compareX(i);
     const plinthHeight = m.hot ? 1.1 : 0.9;
@@ -2765,25 +2784,8 @@ function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
     anchors[m.key] = anchor;
     shimmers[m.key] = sh;
   });
-  const focusRing = new THREE.Mesh(
-    new THREE.TorusGeometry(1.28, 0.045, 8, 48),
-    new THREE.MeshBasicMaterial({
-      color: AMBER, transparent: true, opacity: lowTier ? 0.8 : 0,
-      depthWrite: false, blending: THREE.AdditiveBlending
-    })
-  );
-  focusRing.rotation.x = Math.PI / 2;
-  focusRing.position.set(compareX(0), 0.08, 0);
-  focusRing.visible = lowTier;
-  g.add(focusRing);
   scene.add(g);
   stationSpot(scene, s, 64);
-  /* hotter pool over the agreement plinth */
-  const agreementX = anchors.agreement.position.x;
-  stationSpot(scene, s, 100, new THREE.Vector3(
-    Math.sin(g.rotation.y + Math.PI / 2) * agreementX,
-    0,
-    Math.cos(g.rotation.y + Math.PI / 2) * agreementX));
   function ghostModel(entry, on) {
     if (!entry) return;
     entry.obj.traverse((o) => {
@@ -2834,8 +2836,15 @@ function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
         : qualityTier === "mid" ? 14000 : 18000;
       const sampled = nativePoints > 0
         ? { proxy: null, meshes: [], points: nativePoints, kind: "point-cloud" }
-        : { ...pointProxyForModel(obj, method?.hot ? AMBER : ICE, proxyBudget),
-          kind: "surface-model" };
+        : (() => {
+          let displayTriangles = 0;
+          obj.traverse((o) => {
+            if (o.isMesh) displayTriangles += (o.geometry?.index?.count
+              || o.geometry?.getAttribute("position")?.count || 0) / 3;
+          });
+          const proxy = pointProxyForModel(obj, method?.hot ? AMBER : ICE, proxyBudget);
+          return { ...proxy, kind: "surface-model", displayTriangles };
+        })();
       const entry = { obj, ...sampled };
       mounted.set(key, entry);
       if (key === "agreement") {
@@ -2856,11 +2865,10 @@ function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
     },
     get lodState() {
       return {
-        mode: lowTier
-          ? "screen-size-and-focused-proxies-plus-native-rgbd-points"
-          : "screen-size-proxies-plus-native-rgbd-points",
+        mode: "screen-size-surface-lod-and-stable-proxies-plus-native-rgbd-points",
         entries: [...mounted].map(([key, entry]) => ({
           key, kind: entry.kind, points: entry.points,
+          displayTriangles: entry.displayTriangles || 0,
           mountBounds: entry.obj.userData.mountBounds || null
         })),
         turntable: {
@@ -2890,32 +2898,6 @@ function buildCompare(scene, s, qualityTier = "high", reducedMotion = false) {
         for (const anchor of Object.values(anchors)) anchor.rotation.y = turntableYaw;
         lastTurntableT = t;
       }
-      if (!lowTier) return;
-      const focus = Math.floor(t / 3.2) % METHODS.length;
-      const focusKey = METHODS[focus].key;
-      /* Put the method opposite the amber focus into point mode. This keeps
-         the selected object and two neighbours as complete meshes while each
-         source takes a turn shedding its raster cost. */
-      let proxyKey = null;
-      for (let offset = 2; offset < METHODS.length + 2; offset++) {
-        const candidate = METHODS[(focus + offset) % METHODS.length].key;
-        if (mounted.get(candidate)?.proxy) { proxyKey = candidate; break; }
-      }
-      for (const [key, entry] of mounted) {
-        if (!entry.proxy) continue;
-        if (key === "agreement" && agreementGhosted) {
-          entry.proxy.userData.focusProxyActive = false;
-          entry.meshes.forEach((mesh) => { mesh.visible = true; });
-          entry.proxy.visible = false;
-          continue;
-        }
-        const pointMode = key === proxyKey;
-        entry.proxy.userData.focusProxyActive = pointMode;
-        entry.meshes.forEach((mesh) => { mesh.visible = !pointMode; });
-        entry.proxy.visible = pointMode;
-      }
-      focusRing.position.x += (anchors[focusKey].position.x - focusRing.position.x) * 0.12;
-      focusRing.material.opacity = 0.55 + 0.3 * Math.sin(t * 4.1) ** 2;
     }
   };
 }

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createAutoNavigator } from "../js/world/auto-nav.js?v=20260829-spoken-tour-v7";
+import { createAutoNavigator } from "../js/world/auto-nav.js?v=20260907-ranch-drive-v6";
 
 const clearNav = createAutoNavigator({ probe: () => false });
 const clear = clearNav.update({

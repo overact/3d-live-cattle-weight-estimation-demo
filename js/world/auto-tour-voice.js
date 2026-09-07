@@ -25,7 +25,8 @@ function selectEnglishVoice(synth) {
 
 export function createAutoTourVoice({
   synth = globalThis.speechSynthesis,
-  Utterance = globalThis.SpeechSynthesisUtterance
+  Utterance = globalThis.SpeechSynthesisUtterance,
+  now = () => performance.now()
 } = {}) {
   const available = !!synth && typeof synth.speak === "function" && typeof Utterance === "function";
   let enabled = available;
@@ -38,17 +39,22 @@ export function createAutoTourVoice({
   let lastText = "";
   let lastVoice = "";
   let lastError = "";
+  let current = null;
+  let startedAt = 0;
+  let readingMs = 0;
+  let finished = false;
+  let generation = 0;
 
   function cancel() {
-    if (!available) return;
-    synth.cancel();
+    generation += 1; // late callbacks from cancelled utterances cannot release a new Step
+    if (available) synth.cancel();
     cancellations += 1;
     speaking = false;
     queued = false;
   }
 
   function speak(state) {
-    if (!available || !enabled || state?.phase !== "dwell") return false;
+    if (state?.phase !== "dwell") return false;
     /* The subtitle can keep compact notation (RGB, R², 2.22%), while the
        spoken copy uses words and punctuation that browser voices phrase well. */
     const text = String(state.speech || state.narration || "").trim();
@@ -59,6 +65,12 @@ export function createAutoTourVoice({
     lastKey = key;
     lastText = text;
     lastError = "";
+    current = state;
+    startedAt = now();
+    readingMs = Math.max(5000, text.split(/\s+/).length / 145 * 60000 + 1000);
+    finished = false;
+    if (!available || !enabled) return true; // readable, paced captions without audio
+    const requestGeneration = generation;
     const utterance = new Utterance(text);
     utterance.lang = "en-US";
     utterance.rate = 1.0;
@@ -71,20 +83,27 @@ export function createAutoTourVoice({
     } else {
       lastVoice = "Browser default English";
     }
-    utterance.onstart = () => { speaking = true; queued = false; };
+    utterance.onstart = () => {
+      if (requestGeneration !== generation) return;
+      speaking = true; queued = false;
+    };
     utterance.onend = () => {
+      if (requestGeneration !== generation) return;
       speaking = false;
       queued = false;
+      finished = true;
       completions += 1;
     };
     utterance.onerror = (event) => {
+      if (requestGeneration !== generation) return;
       speaking = false;
       queued = false;
       lastError = String(event?.error || "speech-error");
     };
     queued = true;
     requests += 1;
-    synth.speak(utterance);
+    try { synth.speak(utterance); }
+    catch { utterance.onerror({ error: "synthesis-failed" }); }
     return true;
   }
 
@@ -92,10 +111,12 @@ export function createAutoTourVoice({
     handleState(state = {}) {
       if (state.type === "start") {
         cancel();
+        current = null;
         lastKey = null;
       } else if (state.type === "stop" ||
                  (state.type === "phase" && state.phase === "approach")) {
         cancel();
+        current = null;
       } else if (state.type === "phase" && state.phase === "dwell") {
         speak(state);
       }
@@ -108,20 +129,31 @@ export function createAutoTourVoice({
       if (!enabled) cancel();
       else {
         lastKey = null;
-        speak(currentState);
+        speak(currentState || current);
       }
       return this.qaState;
     },
 
-    stop() { cancel(); },
+    stop() { cancel(); current = null; },
 
     get qaState() {
+      const elapsed = now() - startedAt;
+      if (current && ((queued && elapsed > 5000) ||
+          (speaking && elapsed > readingMs * 2 + 5000))) {
+        cancel();
+        lastError = "speech-timeout";
+      }
+      const captionMode = !available || !enabled || !!lastError;
+      const complete = !current || finished || (captionMode && elapsed >= readingMs);
       return {
         available,
         enabled,
         speaking,
         queued,
-        blocking: enabled && (speaking || queued),
+        blocking: !complete,
+        complete,
+        captionMode,
+        readingMs,
         requests,
         completions,
         cancellations,

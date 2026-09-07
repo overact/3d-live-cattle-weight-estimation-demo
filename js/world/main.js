@@ -5,34 +5,38 @@
 import * as THREE from "../../vendor/three.module.js";
 import { OrbitControls } from "../../vendor/OrbitControls.js";
 import { GLTFLoader } from "../../vendor/GLTFLoader.js";
+import { clone as cloneSkinned } from "../../vendor/SkeletonUtils.js";
 import { CSS2DRenderer } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { buildEnvironment } from "./environment.js?v=20260829-spoken-tour-v7";
-import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260823-step05-visible-spin-step08-continuous";
+import { STATIONS, OVERVIEW, buildTimeline, poseAt, travelPose, pathTravelPose, arcPose, dwellPose } from "./rail.js?v=20260907-ranch-drive-v6";
+import { buildEnvironment } from "./environment.js?v=20260907-ranch-drive-v6";
+import { buildStations, loadAgreementPayload, startStationTextures } from "./stations.js?v=20260907-ranch-drive-v6";
 import { needsFullSourceTextures } from "./source-texture-policy.js";
-import { initPanels, makeStationMarkers } from "./panels.js?v=20260823-step05-visible-spin-step08-continuous";
-import { initTravelCaption } from "./travel-caption.js?v=20260813-rgbd-pointcloud";
-import { initStepScrubber } from "./step-scrubber.js?v=20260812-view-routing";
-import { initReaderGuide } from "./reader-guide.js?v=20260812-gantry-trigger";
-import { initRoam } from "./roam.js?v=20260829-spoken-tour-v7";
-import { createAutoTour } from "./auto-tour.js?v=20260829-spoken-tour-v7";
-import { initAutoTourHud } from "./auto-tour-hud.js?v=20260829-spoken-tour-v7";
-import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260829-spoken-tour-v7";
-import { createPipelineCarry } from "./pipeline-carry.js?v=20260823-step05-visible-spin-step08-continuous";
+import { initPanels, makeStationMarkers } from "./panels.js?v=20260907-ranch-drive-v6";
+import { initTravelCaption } from "./travel-caption.js?v=20260907-ranch-drive-v6";
+import { initStepScrubber } from "./step-scrubber.js?v=20260907-ranch-drive-v6";
+import { initReaderGuide } from "./reader-guide.js?v=20260907-ranch-drive-v6";
+import { initRoam } from "./roam.js?v=20260907-ranch-drive-v6";
+import { createAutoTour } from "./auto-tour.js?v=20260907-ranch-drive-v6";
+import { initAutoTourHud } from "./auto-tour-hud.js?v=20260907-ranch-drive-v6";
+import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260907-ranch-drive-v6";
+import { createRanchRace } from "./race.js?v=20260907-ranch-drive-v6";
+import { exhibitCompletion } from "./tour-completion.js";
+import { createPipelineCarry } from "./pipeline-carry.js?v=20260907-ranch-drive-v6";
 /* Version the changed world graph together. An old cached pre-bind-pose avatar
    adapter scales a cloned SkinnedMesh to ~1/900 and leaves only its shadow. */
-import { createGlbCattle } from "../lib/glb-cattle.js?v=20260811-fast-dense";
-import { loadReconSteps } from "../lib/recon-player.js?v=20260812-virtual-clock";
+import { createGlbCattle } from "../lib/glb-cattle.js?v=20260907-ranch-drive-v6";
+import { loadReconSteps } from "../lib/recon-player.js?v=20260907-ranch-drive-v6";
+import { fetchAsset } from "../lib/fetch-asset.js";
 import {
   AdaptivePixelRatio,
   planQuality,
   readDeviceSignals
-} from "../lib/device-tier.js?v=20260823-adaptive-dpr";
+} from "../lib/device-tier.js?v=20260907-ranch-drive-v6";
 import {
   createRenderLifecycle,
   handleRenderPageHide,
   handleRenderPageShow
-} from "./render-lifecycle.js?v=20260823-step05-visible-spin-step08-continuous";
+} from "./render-lifecycle.js?v=20260907-ranch-drive-v6";
 
 /* ---------- params / flags ---------- */
 
@@ -109,14 +113,9 @@ function hideEntryToast(force = false) {
 }
 
 function showEntryToast(destination) {
-  const free = destination === "overview";
-  entryToastTitle.textContent = free ? "FREE EXPLORE READY" : "GUIDED TRAIL READY";
-  entryToastBody.textContent = free
-    ? "Drag to orbit, right-drag to pan, and scroll to zoom. Select any exhibit to inspect it; press C to roam as the calf."
-    : "You are driving the calf. Follow the amber path with WASD, or choose a numbered station to auto-run there. Drag to look; press C or Esc to leave calf mode.";
-  entryToastKeys.textContent = free
-    ? "DRAG → ORBIT · RIGHT-DRAG → PAN · SCROLL → ZOOM · C → CALF"
-    : "WASD → MOVE · SHIFT → RUN · DRAG → LOOK · 0–8 → AUTO-RUN";
+  entryToastTitle.textContent = "STEP 00 · YOU ARE IN CONTROL";
+  entryToastBody.textContent = "Your calf is ready. Follow the amber trail, explore any station, or press T for the English voice tour. Try GAMING MODE for a race.";
+  entryToastKeys.textContent = "WASD → MOVE · SHIFT → RUN · SPACE → JUMP · E → DASH";
   clearTimeout(entryToastShowTimer);
   clearTimeout(entryToastHideTimer);
   entryToastShowTimer = setTimeout(() => {
@@ -231,7 +230,6 @@ async function main() {
   });
   let lastIntroFrameMs = null;
   let lastLiveFrameMs = null;
-  const INTRO_FRAME_INTERVAL_MS = 1000 / 12;
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 400);
@@ -284,7 +282,7 @@ async function main() {
        onboarding normally renders only once, so explicitly invalidate that
        still and schedule its replacement after an orientation/viewport change. */
     lastIntroFrameMs = null;
-    if (REDUCED && !document.body.classList.contains("world-entered") &&
+    if (!document.body.classList.contains("world-entered") &&
         renderLifecycle?.isRunning) requestAnimationFrame(renderFrame);
   }
   window.addEventListener("resize", resize);
@@ -322,6 +320,16 @@ async function main() {
     setAgreementGhosted: (on) => stations.setAgreementGhosted(on)
   });
   const markerEls = makeStationMarkers(scene, (i) => navStation(i));
+  const exhibitRoots = stations.roots;
+  let focusedExhibit = null;
+  function focusExhibits(index) {
+    if (index === focusedExhibit) return;
+    focusedExhibit = index;
+    for (const { station, objects } of exhibitRoots) {
+      for (const object of objects) object.visible = index === -1 || station === index;
+    }
+    markerEls.forEach((el, i) => { el.hidden = index !== -1 && i !== index; });
+  }
 
   /* invisible per-station hit volumes: clicking an exhibit rail-travels there */
   const hitTargets = STATIONS.map((s, i) => {
@@ -380,6 +388,7 @@ async function main() {
   const autoTourHud = initAutoTourHud({
     onTakeControl: () => interruptAutoTour("hud"),
     onStart: () => startAutoTour(),
+    onIntroEnter: () => enterWorld("voice"),
     onToggleVoice: () => autoTourVoice.toggle(autoTour.qaState)
   });
   autoTourHud.setAvailable(false);
@@ -395,6 +404,11 @@ async function main() {
      ?avatar=chibi keeps the old procedural calf (also the automatic fallback
      if the GLB never arrived), ?avatar=cube keeps the Kenney candidate for A/B. */
   let roamAvatar = null;
+  // Clone the unadapted rig: the player adapter adds transforms and advances
+  // its skeleton, so cloning it later is not the same as cloning the asset.
+  const raceCowAsset = env.cowAsset ? {
+    scene: cloneSkinned(env.cowAsset.scene), animations: env.cowAsset.animations
+  } : null;
   const avatarKind = params.get("avatar") || "herd";
   try {
     if (avatarKind === "cube") {
@@ -429,6 +443,15 @@ async function main() {
       pipelineCarry.reconcileStation(null, worldTime, roam.subject, roam.heading);
     },
     onManualIntent: ({ source, action } = {}) => {
+      if (race.active) {
+        if (/^(station-|exit-)/.test(action || "")) return false;
+        return race.state.phase === "racing";
+      }
+      const selected = /^station-([0-8])$/.exec(action || "");
+      if (selected && mode === "auto-tour") {
+        autoTour.selectStep(Number(selected[1]));
+        return false; // the director owns this travel, not manual roam
+      }
       interruptAutoTour(`manual:${source || action || "input"}`);
     },
     chipEl: document.getElementById("stationChip"),
@@ -441,6 +464,26 @@ async function main() {
     else if (mode === "roam") exitRoam("station");
     else enterRoam();
   });
+  const race = createRanchRace({ scene, roam, env, cowAsset: raceCowAsset, onExit: () => stopRace() });
+  let pendingRaceStart = false;
+  function startRace() {
+    if (TOUR || !window.__worldReady) return;
+    if (!worldEntered) { pendingRaceStart = true; enterWorld("game"); return; }
+    if (mode === "travel") { pendingRaceStart = true; return; }
+    interruptAutoTour("gaming-mode");
+    if (mode === "dwell" || mode === "overview") enterRoam();
+    if (mode !== "roam") return;
+    pendingRaceStart = false; pendingAutoStart = false; autoRoam = "spent";
+    hideEntryToast(true); panels.hidePanel(); readerGuide.hide();
+    stations.clearActive(); pipelineCarry.setEnabled(false);
+    race.enter();
+  }
+  function stopRace() {
+    race.exit(); pipelineCarry.setEnabled(true);
+    readerGuide.overview();
+  }
+  document.getElementById("btnRace").addEventListener("click", startRace);
+  document.getElementById("btnRaceIntro").addEventListener("click", startRace);
 
   /* ---- state machine ---- */
   let worldTime = 0;
@@ -473,8 +516,10 @@ async function main() {
        own deployment simulation has produced the kg result; the director
        latches both events, so neither has to finish last. */
     getCompletionState: ({ stepIndex }) => ({
-      narration: !autoTourVoice.qaState.blocking,
-      exhibit: stepIndex !== 8 || !!stations.deploymentState?.weightReady
+      narration: autoTourVoice.qaState.complete,
+      ...exhibitCompletion(stepIndex, stations.pipelineProcessState(stepIndex),
+        ["agreement", "rgbd", "entropy", "average", "trellis2"].map(key => modelLoadStates.get(key)),
+        stations.deploymentState, pipelineCarry.qaState)
     }),
     cancelTravel: () => roam.takeManualControl(),
     onState: (state) => {
@@ -524,7 +569,7 @@ async function main() {
   }
 
   const stationTargetingAllowed = () =>
-    finePointer && (mode === "dwell" || mode === "overview");
+    finePointer && (mode === "dwell" || mode === "overview" || mode === "auto-tour");
 
   function stationAtPointer(clientX, clientY) {
     const r = canvas.getBoundingClientRect();
@@ -755,16 +800,9 @@ async function main() {
 
   function gotoStation(i) {
     if (mode === "tour" || mode === "tour-wait") return;
-    /* A station choice made after T was queued during camera travel is an
-       explicit change of intent. Do not surprise the visitor by starting the
-       tour when this newer navigation settles. */
-    pendingAutoStart = false;
-    /* A dock/panel navigation click is visitor intent too. Keep the calf in the
-       world, end narration, then let the existing readable-side auto-run carry
-       manual mode to the selected exhibit. */
+    // Step selection changes the destination, not the visitor's mode.
     if (mode === "auto-tour") {
-      interruptAutoTour("station-navigation");
-      roam.travelTo(i);
+      autoTour.selectStep(i);
       return;
     }
     /* leaving roam via any station navigation: drop the calf, arc-travel */
@@ -801,8 +839,7 @@ async function main() {
   function navStation(i) {
     if (mode === "roam") { roam.travelTo(i); return; }
     if (mode === "auto-tour") {
-      interruptAutoTour("station-navigation");
-      roam.travelTo(i);
+      autoTour.selectStep(i);
       return;
     }
     gotoStation(i);
@@ -830,7 +867,7 @@ async function main() {
     document.body.classList.toggle("roaming", on);
   }
   function enterRoam() {
-    if (mode !== "dwell" && mode !== "overview") return;
+    if (mode !== "dwell" && mode !== "overview" && mode !== "auto-tour") return;
     hideEntryToast(true);
     clearWorldTargetFeedback();
     mode = "roam";
@@ -845,7 +882,7 @@ async function main() {
     stepScrubber.detach();
     pipelineCarry.setEnabled(true);
     roam.enter(lastStation, worldTime);   // spawn beside the last dwelled station
-    revealEntryToast("guided");
+    revealEntryToast(pendingEntryToast);
   }
 
   function setAutoTourChrome(on) {
@@ -857,6 +894,7 @@ async function main() {
      readable-side pathfinder to reach that nearest Step, then begins its timed
      narration; no teleport or camera cut is introduced by resuming with T. */
   function startAutoTour() {
+    if (race.active) return false;
     if (TOUR || window.__worldReady !== true) return false;
     if (!worldEntered) enterWorld("overview");
     if (mode === "auto-tour") {
@@ -983,13 +1021,28 @@ async function main() {
   /* ---- loop ---- */
   const clock = new THREE.Clock();
   const _panV = new THREE.Vector3();
+  let framingSignature = "";
+  function frameInspector() {
+    const w = wrap.clientWidth, h = wrap.clientHeight;
+    const panel = document.getElementById("stationPanel");
+    const inset = w >= 960 && (mode === "dwell" || mode === "roam") &&
+      panel.classList.contains("open") ? panel.offsetWidth + 36 : 0;
+    const narrowExhibit = w < 640 && (mode === "dwell" || mode === "auto-tour");
+    const featureExhibit = (mode === "dwell" && lastStation === 6) ||
+      (mode === "auto-tour" && autoTour.qaState.phase === "dwell" && autoTour.qaState.stepIndex === 6);
+    const signature = `${w}:${h}:${inset}:${narrowExhibit}:${featureExhibit}`;
+    if (signature === framingSignature) return;
+    framingSignature = signature;
+    camera.zoom = (inset ? (w - inset) / w : narrowExhibit ? w / 1200 : 1) * (featureExhibit ? 0.82 : 1);
+    if (inset) camera.setViewOffset(w, h, inset / 2, 0, w, h);
+    else camera.clearViewOffset();
+    camera.updateProjectionMatrix();
+  }
   function renderFrame(frameMs = performance.now()) {
-    /* The live ranch remains visible behind onboarding, but a reading surface
-       does not need 60 full WebGL renders per second. Reduced-motion visitors
-       get a single still frame; everyone else gets a calm 12 fps background. */
+    /* A settled backdrop keeps onboarding readable and avoids shader/lighting
+       changes flashing behind the opening panel. Resize invalidates the still. */
     if (mode === "intro") {
-      if (lastIntroFrameMs !== null &&
-          (REDUCED || frameMs - lastIntroFrameMs < INTRO_FRAME_INTERVAL_MS)) return;
+      if (lastIntroFrameMs !== null) return;
       lastIntroFrameMs = frameMs;
     } else {
       if (lastLiveFrameMs !== null) {
@@ -1023,12 +1076,13 @@ async function main() {
         autoRoam = "spent";
         if (mode === "dwell") enterRoam();
       }
+      if (pendingRaceStart && mode === "roam") startRace();
       if (mode === "travel") updateTravel();
       else if (mode === "auto-tour") {
         roam.update(dt, worldTime);
         autoTour.update(dt);
       }
-      else if (mode === "roam") roam.update(dt, worldTime);
+      else if (mode === "roam" && (!race.active || race.driving)) roam.update(dt, worldTime);
       else if (mode === "dwell") {
         /* right-drag pan stays near the exhibit while allowing wider inspection */
         _panV.subVectors(controls.target, dwellCenter);
@@ -1046,6 +1100,7 @@ async function main() {
       }
     }
     updateWorldTargetFeedback();
+    race.update(dt);
     /* the calf's live position drives both rigs' shutter bursts */
     env.update(worldTime, roam.subject);
     stations.update(
@@ -1053,9 +1108,14 @@ async function main() {
     pipelineCarry.update(dt, worldTime, roam.subject, roam.heading);
     stepScrubber.update();   // playhead/label track the player's virtual clock
     /* after the camera for this frame is final, before anything is drawn */
+    frameInspector();
+    const focusIndex = race.active ? -2 : mode === "dwell" && lastStation > 0 ? lastStation
+      : mode === "auto-tour" && autoTour.qaState.phase === "dwell" ? autoTour.qaState.stepIndex : -1;
+    focusExhibits(focusIndex);
     stations.updateModelLod(camera);
     renderer.render(scene, camera);
     css2d.render(scene, camera);
+    if (!document.body.classList.contains("world-painted")) document.body.classList.add("world-painted");
   }
   renderLifecycle = createRenderLifecycle({
     renderer,
@@ -1133,6 +1193,11 @@ async function main() {
     get scrub() { return stepScrubber.qaState; },
     get openingGuide() {
       return { step: openingGuideStep, total: guidePanels.length, entered: worldEntered };
+    },
+    race: {
+      enter: () => startRace(), exit: () => stopRace(), start: () => race.start(),
+      visuals: () => race.inspectVisuals(),
+      get state() { return race.state; }
     },
     /* Attribute the frame's cost to named scene children. renderInfo says the
        ranch is expensive; this says WHICH exhibit is paying, which is what a
@@ -1350,14 +1415,10 @@ async function main() {
     /* READY already waits for the first local photo decode/upload pass. This
        idempotent call only retries a source that was temporarily unavailable. */
     startStationTextures(renderer);
-    if (destination === "overview") {
-      /* EXPLORE FREELY means the paper map, not an involuntary mode switch.
-         The primary CALF-GUIDED route keeps the automatic entrance. */
-      autoRoam = "spent";
-      finishOverview();
-    } else {
-      gotoStation(0);  // arc down to the ranch gate, then auto-enter the calf
-    }
+    // Every entrance lands at the same playable starting point. Automatic
+    // narration remains an explicit in-world action, never an entry side effect.
+    autoRoam = "waiting";
+    gotoStation(0);
   }
 
   btnEnter.addEventListener("click", () => enterWorld("guided"));
@@ -1373,10 +1434,13 @@ async function main() {
      when, that asset's bytes change. */
   const MODEL_VERSION = { rgbd: "20260813-camera-mount-review" };
   const modelUrl = (key) => {
-    const base = `assets/cases/case_001/models/${key}.glb`;
+    const display = key !== "rgbd" && new URLSearchParams(location.search).get("detail") !== "full";
+    const base = `assets/cases/case_001/models/${display ? "display/" : ""}${key}.glb`;
+    if (display && key === "trellis2") return `${base}?v=20260907-welded`;
     return MODEL_VERSION[key] ? `${base}?v=${MODEL_VERSION[key]}` : base;
   };
   const modelRequests = new Map();
+  const modelLoadStates = new Map();
   const pauseForPaint = () => new Promise((resolve) => {
     if ("requestIdleCallback" in window) requestIdleCallback(resolve, { timeout: 250 });
     else requestAnimationFrame(() => resolve());
@@ -1384,13 +1448,12 @@ async function main() {
   function requestModel(key) {
     if (modelRequests.has(key)) return modelRequests.get(key);
     stations.markModelLoading(key);
+    modelLoadStates.set(key, "loading");
     const request = (async () => {
       let lastError = null;
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const response = await fetch(modelUrl(key));
-          if (!response.ok) throw new Error(`HTTP ${response.status}`);
-          const buf = await response.arrayBuffer();
+          const buf = await fetchAsset(modelUrl(key));
           const gltf = await new Promise((res, rej) =>
             gltfLoader.parse(buf, "assets/cases/case_001/models/", res, rej));
           /* agreement/entropy/average ship POSITION + COLOR_0 only (no
@@ -1444,6 +1507,7 @@ async function main() {
             }
           });
           stations.attachModel(key, gltf.scene);
+          modelLoadStates.set(key, "ready");
           return gltf.scene;
         } catch (err) {
           lastError = err;
@@ -1454,6 +1518,7 @@ async function main() {
       }
       if (!unloading) console.warn(`model ${key} failed to load after retry:`, lastError);
       stations.markModelUnavailable(key);
+      modelLoadStates.set(key, "unavailable");
       return null;
     })();
     modelRequests.set(key, request);
@@ -1573,6 +1638,7 @@ async function main() {
   renderOpeningGuide(openingGuideStep);
   window.__worldReady = true;
   autoTourHud.setAvailable(!TOUR);
+  document.getElementById("btnRaceIntro").disabled = TOUR;
   /* Keep the first viewport inside the Three.js world: the live ranch renders
      behind the route choice instead of presenting an unrelated static page. */
   if (!TOUR) renderLifecycle.start();

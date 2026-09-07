@@ -16,6 +16,7 @@
 import * as THREE from "../../vendor/three.module.js";
 
 const TAU = Math.PI * 2;
+const REDUCED_MOTION = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
 const ease = (k) => k * k * (3 - 2 * k);
 
@@ -137,7 +138,8 @@ export function createGlbCattle(gltf, opts = {}) {
   const model = gltf.scene;
   inner.add(model);
   const bb = bindPoseBox(model);
-  model.scale.setScalar(height / Math.max(bb.max.y - bb.min.y, 1e-6));
+  // Preserve authored or pre-fitted scale when adapting a cloned avatar.
+  model.scale.multiplyScalar(height / Math.max(bb.max.y - bb.min.y, 1e-6));
   model.rotation.y = forwardYaw;
   const bb2 = bindPoseBox(model);
   model.position.y -= bb2.min.y;
@@ -205,6 +207,7 @@ export function createGlbCattle(gltf, opts = {}) {
   let squashP = 1, squashV = 0;
   let flipT = Infinity;
   let dashT = Infinity;
+  let turnLean = 0;
   /* one clock per emote, so an asset with no emote clips still gets the
      procedural version — and the two can run together where a clip exists */
   const emoteT = { spin: Infinity, flex: Infinity, bow: Infinity, moo: Infinity, denoise: Infinity };
@@ -245,7 +248,8 @@ export function createGlbCattle(gltf, opts = {}) {
     /* lean & air pitch on the wrapper (never fights the node clips) */
     const dashK = dashT < DASH_S ? 1 - dashT / DASH_S : 0;
     const airPitch = grounded ? 0 : clamp(-vy * 0.045, -0.3, 0.42);
-    flip.rotation.z = 0;
+    turnLean += (clamp((pose.turnRate || 0) * 0.025, -0.1, 0.1) - turnLean) * (1 - Math.exp(-8 * dt));
+    flip.rotation.z = grounded ? turnLean : 0;
     if (flipT < FLIP_S) {
       flipT += dt;
       flip.rotation.x = TAU * ease(clamp(flipT / FLIP_S, 0, 1));
@@ -255,7 +259,8 @@ export function createGlbCattle(gltf, opts = {}) {
     }
 
     /* squash & stretch spring */
-    const stretchTarget = grounded ? 1 : 1 + clamp(Math.abs(vy) * 0.02, 0, 0.16);
+    const stretchTarget = grounded ? 1 + (!REDUCED_MOTION && speed01 < 0.04 ? Math.sin(t * 2) * 0.004 : 0)
+      : 1 + clamp(Math.abs(vy) * 0.02, 0, 0.16);
     squashV += (stretchTarget - squashP) * 90 * dt;
     squashV *= Math.exp(-11 * dt);
     squashP += squashV * dt;

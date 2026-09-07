@@ -9,10 +9,10 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { createAutoNavigator } from "./auto-nav.js?v=20260829-spoken-tour-v7";
+import { STATIONS } from "./rail.js?v=20260907-ranch-drive-v6";
+import { createAutoNavigator } from "./auto-nav.js?v=20260907-ranch-drive-v6";
 import { createChibiCattle } from "../lib/chibi-cattle.js";
-import { createThirdPersonRig, turnToward } from "../lib/third-person-rig.js?v=20260812-steering";
+import { createThirdPersonRig, turnToward } from "../lib/third-person-rig.js?v=20260907-ranch-drive-v6";
 
 const AMBER = 0xe39b2d, ICE = 0x86d7ea;
 const REDUCED_MOTION = typeof matchMedia !== "undefined" &&
@@ -516,6 +516,8 @@ export function initRoam({
   const echoes = buildEchoes();
 
   let active = false;
+  let gameMode = false;
+  let raceBoost=false, lastRaceSpark=-Infinity;
   let worldT = 0;
   let nearI = -1;
   let framing01 = 0;   // camera framing this frame (QA-visible)
@@ -607,7 +609,7 @@ export function initRoam({
     /* Station 08 starts moving immediately. Keep its reader panel collapsed
        in roam so the first shutter/line handoff stays visible; the station
        chip can reopen the same content at any time. */
-    panels.showStation(i, { open: i !== 8 });
+    panels.showStation(i, { open: false });
     if (i === 8) faceExhibit(i);
     onGuideStation?.(i);
     setMarkerFocus(i);
@@ -730,11 +732,13 @@ export function initRoam({
      the automated sequence left on screen. Keep it idempotent because the
      same physical gesture can be observed by more than one UI layer. */
   function takeManualControl() {
+    // Release only an auto-run's Shift. A second manual key (or key-repeat)
+    // must not cancel the Shift already held by the visitor.
+    if (autoTravel) rig.press("run", false);
     autoTravel = null;
     autoFace = null;
     autoNavigator.reset();
     rig.setAutoDir(null);
-    rig.press("run", false);
     return active;
   }
 
@@ -779,7 +783,7 @@ export function initRoam({
      controls first. The callback may synchronously exit roam, hence every
      caller must honour the returned active state before touching the rig. */
   function notifyManualIntent(source, action) {
-    onManualIntent?.({ source, action });
+    if (onManualIntent?.({ source, action }) === false) return false;
     return active;
   }
 
@@ -797,6 +801,7 @@ export function initRoam({
     if (e.repeat) return;
     const digit = /^(?:Digit|Numpad)([0-8])$/.exec(e.code);
     if (digit) {
+      e.preventDefault(); e.stopImmediatePropagation();
       if (!notifyManualIntent("keyboard", `station-${digit[1]}`)) return;
       travelTo(parseInt(digit[1], 10));
       return;
@@ -862,8 +867,12 @@ export function initRoam({
     const dx = e.clientX - dragX, dy = e.clientY - dragY;
     if (dx === 0 && dy === 0) return;
     if (!dragIntentSent) {
+      if (Math.hypot(dx, dy) < 8) return; // a click with hand jitter is not a takeover
       dragIntentSent = true;
-      if (!notifyManualIntent(e.pointerType === "touch" ? "touch" : "pointer", "look")) return;
+      if (!notifyManualIntent(e.pointerType === "touch" ? "touch" : "pointer", "look")) {
+        dragging = false;
+        return;
+      }
     }
     learned.looked = true;
     rig.orbit(dx, dy);
@@ -906,7 +915,7 @@ export function initRoam({
          but the calf now shows itself in unasked, so an unrequested 11 u fall
          is exactly the kind of motion that setting exists to refuse. */
       if (!hasDropped && !REDUCED_MOTION) {
-        rig.drop(11);
+        rig.drop(1.2); // a small arrival hop keeps the avatar in the first frame
         dropping = true;
       } else {
         dropping = false;
@@ -1002,6 +1011,7 @@ export function initRoam({
         }
       }
 
+      const oldHeading = rig.state.heading;
       rig.update(dt);
       const st = rig.state;
 
@@ -1021,6 +1031,7 @@ export function initRoam({
       cattle.update(dt, t, {
         speed01: st.speed01,
         speed: st.speed,     // u/s — GLB avatars set gait cadence from this
+        turnRate: Math.atan2(Math.sin(st.heading - oldHeading), Math.cos(st.heading - oldHeading)) / Math.max(dt, 1e-4),
         run01: st.run01,
         grounded: st.grounded,
         vy: st.vy,
@@ -1032,9 +1043,10 @@ export function initRoam({
          streams out through the whole burst, not just the input window. */
       trail.tick(t);
       ribbon.tick(t);
-      if (dashLeft > 0 || Math.abs(st.speed) > 10.5) {
+      if (dashLeft > 0 || Math.abs(st.speed) > 10.5 || raceBoost) {
         ribbon.emit(st.pos.x, st.pos.y + 0.66, st.pos.z, t);
       }
+      if(raceBoost && t-lastRaceSpark>.08){lastRaceSpark=t;trail.emit(st.pos.x,st.pos.y+.5,st.pos.z,t,.6);}
       if (dashLeft > 0) {
         dashLeft -= dt;
         trail.emit(st.pos.x, st.pos.y + 0.45, st.pos.z, t);
@@ -1053,7 +1065,7 @@ export function initRoam({
          the bubble timers on purpose: an arrival line is content and the coach
          is not, and when both wanted the same frame the coach used to speak
          first and be overwritten before anyone could read it. */
-      if (!dropping) {
+      if (!dropping && !gameMode) {
         const near = nearestStation();
         framing01 = framingForDistance(near.d);
         rig.setFraming(framing01);
@@ -1070,13 +1082,13 @@ export function initRoam({
         bubbleLeft -= dt;
         chatterT = 0;
         if (bubbleLeft <= 0) hushBubble();
-      } else if (coachStep < COACH.length && !coachUp && !dropping) {
+      } else if (!gameMode && coachStep < COACH.length && !coachUp && !dropping) {
         /* the calf teaches its own controls before the idle tips start. Each
            prompt is said ONCE — re-saying it on expiry would both nag and reset
            the patience clock, so the sequence could never finish. */
         say(COACH[coachStep].text, COACH_PROMPT_S);
         coachUp = true;
-      } else if (!autoTravel && !dropping) {
+      } else if (!gameMode && !autoTravel && !dropping) {
         /* quiet for a while → the calf offers a tip (deterministic cadence) */
         chatterT += dt;
         if (chatterT > 24) {
@@ -1103,6 +1115,21 @@ export function initRoam({
     },
 
     /* QA / recorder hooks */
+    releaseInputs() { rig.releaseAll(); },
+    celebrate() { cattle?.emote("flex"); },
+    setGameMode(on) {
+      gameMode = on;
+      rig.setRaceSteering(on);
+      raceBoost=false;
+      cancelAuto(); rig.releaseAll(); autoFace = null; dropping = false;
+      if (nearI !== -1) leaveStation();
+      hushBubble();
+      rig.setSpeedMultiplier(1);
+      if (on) { framing01 = 0.55; rig.setFraming(framing01, true); }
+    },
+    setRaceSpeed(k) { if (gameMode) rig.setSpeedMultiplier(k); },
+    setRaceBoost(on) { raceBoost=gameMode&&on; },
+    raceImpact() { if(gameMode) { rig.brake(); cattle?.setTint(0xeb6546,.8); } },
     press(action, isDown) {
       if (action === "egg") { fireEgg(); return; }
       if (action === "moo") { if (cattle) cattle.emote("moo"); return; }
@@ -1118,7 +1145,11 @@ export function initRoam({
     teleport(x, z, heading = rig.state.heading) {
       if (![x, z, heading].every(Number.isFinite)) return false;
       rig.teleport(x, z, heading);
-      if (cattle) cattle.group.position.copy(rig.state.pos);
+      if (cattle) {
+        cattle.group.position.copy(rig.state.pos);
+        cattle.group.rotation.y = heading;
+        cattle.update(0, 0, rig.state);
+      }
       rig.snapCamera();
       return true;
     },
@@ -1132,6 +1163,7 @@ export function initRoam({
         active,
         pos: [st.pos.x, st.pos.y, st.pos.z],
         heading: st.heading,
+        modelHeading: cattle?.group.rotation.y ?? null,
         camYaw: rig.camYaw,
         grounded: st.grounded,
         vy: st.vy,

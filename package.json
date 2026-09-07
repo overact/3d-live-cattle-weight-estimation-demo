@@ -5,7 +5,7 @@
   "private": true,
   "description": "Three-page static show demo for agreement-driven live-cattle reconstruction and weight estimation.",
   "scripts": {
-    "verify": "node scripts/check-public.mjs && node scripts/check-auto-tour.mjs && node scripts/check-auto-nav.mjs && node scripts/check-auto-tour-voice.mjs",
-    "verify:auto-tour": "node scripts/check-auto-tour.mjs && node scripts/check-auto-nav.mjs && node scripts/check-auto-tour-voice.mjs"
+    "verify": "node scripts/check-public.mjs && npm run verify:auto-tour && node scripts/check-fetch-asset.mjs && node scripts/test-surface-lod.mjs && node scripts/check-race.mjs && node scripts/check-race-audio.mjs && node scripts/check-race-steering.mjs && node scripts/check-avatar-scale.mjs && node scripts/check-recon-coverage.mjs",
+    "verify:auto-tour": "node scripts/check-auto-tour.mjs && node scripts/check-auto-nav.mjs && node scripts/check-auto-tour-voice.mjs && node scripts/check-tour-completion.mjs"
   }
 }

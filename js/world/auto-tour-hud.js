@@ -24,7 +24,7 @@ function isEditableTarget(target) {
  * Presentation layer for the interruptible, voice-paced ranch tour.
  * The world controller owns lifecycle and calls show(frame) from its clock.
  */
-export function initAutoTourHud({ onTakeControl, onStart, onToggleVoice } = {}) {
+export function initAutoTourHud({ onTakeControl, onStart, onIntroEnter, onToggleVoice } = {}) {
   const root = document.getElementById("autoTourHud");
   const startButton = document.getElementById("btnAutoTour");
   const introStartButton = document.getElementById("btnAutoTourIntro");
@@ -72,8 +72,8 @@ export function initAutoTourHud({ onTakeControl, onStart, onToggleVoice } = {}) 
     voiceButton.textContent = !voiceAvailable
       ? "VOICE UNAVAILABLE"
       : voiceEnabled
-        ? (voiceSpeaking ? "VOICE PLAYING" : "VOICE ON")
-        : "VOICE OFF";
+        ? (state.captionMode ? "TEXT TOUR · AUDIO UNAVAILABLE" : voiceSpeaking ? "VOICE PLAYING" : "VOICE ON")
+        : "TEXT TOUR · VOICE OFF";
     const voiceSuffix = voiceName ? ` · ${voiceName}` : "";
     voiceButton.title = !voiceAvailable
       ? "English browser voice is unavailable"
@@ -98,7 +98,11 @@ export function initAutoTourHud({ onTakeControl, onStart, onToggleVoice } = {}) 
   };
 
   startButton.addEventListener("click", requestStart);
-  introStartButton.addEventListener("click", requestStart);
+  introStartButton.addEventListener("click", () => {
+    if (!available) return;
+    if (onIntroEnter) onIntroEnter();
+    else requestStart();
+  });
   takeControlButton.addEventListener("click", () => {
     takeControlRequests++;
     takeControl();

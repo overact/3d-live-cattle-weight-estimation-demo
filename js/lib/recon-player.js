@@ -33,26 +33,19 @@ function hash1(i, salt) {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
 }
 
+import { fetchAsset } from "./fetch-asset.js";
+
 export async function loadReconSteps(baseUrl) {
   try {
     /* Start geometry beside metadata; declared model color is part of the
        trace contract and must arrive before the evidence is displayable. */
-    const [metaResponse, stepsResponse] = await Promise.all([
-      fetch(`${baseUrl}/meta.json`, { cache: "no-cache" }),
-      fetch(`${baseUrl}/steps.bin`, { cache: "no-cache" })
+    const [meta, buf] = await Promise.all([
+      fetchAsset(`${baseUrl}/meta.json`, "json"),
+      fetchAsset(`${baseUrl}/steps.bin`)
     ]);
-    if (!metaResponse.ok || !stepsResponse.ok) {
-      throw new Error(
-        `${baseUrl} reconstruction trace → HTTP ${metaResponse.status}/${stepsResponse.status}`
-      );
-    }
-    const meta = await metaResponse.json();
     if (!meta.stage2Rgba?.file) {
       throw new Error("Stage-2 model-color export is missing");
     }
-    const rgbaRequest = fetch(
-      `${baseUrl}/${meta.stage2Rgba.file}`, { cache: "no-cache" });
-    const buf = await stepsResponse.arrayBuffer();
     if (!Array.isArray(meta.counts) || meta.counts.length !== meta.steps) {
       throw new Error("reconstruction step count mismatch");
     }
@@ -90,11 +83,7 @@ export async function loadReconSteps(baseUrl) {
     } else {
       positions = new Float32Array(buf);
     }
-    const rgbaResponse = await rgbaRequest;
-    if (!rgbaResponse.ok) {
-      throw new Error(`${baseUrl}/${meta.stage2Rgba.file} → HTTP ${rgbaResponse.status}`);
-    }
-    const rgbaBuffer = await rgbaResponse.arrayBuffer();
+    const rgbaBuffer = await fetchAsset(`${baseUrl}/${meta.stage2Rgba.file}`);
     const expectedCounts = meta.counts.slice(meta.stages[0]);
     if (
       meta.stage2Rgba.itemSize !== 4 ||
@@ -158,11 +147,17 @@ export function stage2LodIndices(maxCount, perVoxel, keep) {
 /* Stage-2 soft-disc constants, exported so the unit tests assert the numbers
    the shader actually receives instead of restating them. */
 export const STAGE2_DISC = {
-  SIZE_BOOST: 1.30,      // regrow the footprint the gaussian falloff hides
+  SIZE_BOOST: 1.55,      // cover gaps between the recorded centres, not new geometry
   FALLOFF_K: 4.5,        // fragment weight = exp(-K * d^2)
   DISCARD_BELOW: 0.06,   // cheapest tail cut for the disc
   ADDITIVE_ALPHA: 0.40   // the additive arm's tuned per-point alpha compensation
 };
+
+// Point sprites are measured in framebuffer pixels, unlike projected mesh
+// geometry. Match both framebuffer resolution and the actual zoomed lens.
+export function reconPixelScale(bufferHeight, focalY) {
+  return Math.max(0.01, bufferHeight / 900 * focalY / 1.920982126971166);
+}
 
 export function createReconPlayer({
   positions,             // Float32Array [N*3] final cloud (model space)
@@ -215,11 +210,9 @@ export function createReconPlayer({
   const stage2Lod = real
     ? stage2LodIndices(stage2RawMax, stage2PerVoxel, stage2Keep)
     : null;
-  /* A denser cloud describes the same surface with more, finer samples. sqrt
-     scaling made the exported top-8 trace numerically dense but visually
-     needle-thin; this softer exponent preserves LOD ordering while letting the
-     real Gaussian centers read as one surface. */
-  const stage2SizeScale = Math.pow(stage2Keep, -0.35);
+  /* Preserve area coverage when low-tier LOD keeps fewer centres. Normalize
+     at the shipped top-8 trace so this does not shrink its calibrated splats. */
+  const stage2SizeScale = Math.pow(stage2Keep, -0.5) * Math.pow(8, 0.15);
   /* Buffer capacity is what is DRAWN, so opting a phone down to 4 of 8
      Gaussians also halves vertex memory, not just the draw work. */
   const stage2Max = real && stages[1] > 0
@@ -345,6 +338,7 @@ export function createReconPlayer({
       uQ: { value: 0 },
       uTime: { value: 0 },
       uSize: { value: stage2PointSize * stage2SizeScale * STAGE2_DISC.SIZE_BOOST },
+      uViewportScale: { value: 1 },
       uOpacity: { value: stage2Opacity * (additive ? STAGE2_DISC.ADDITIVE_ALPHA : 1) },
       uExposure: { value: stage2Exposure },
       uGamma: { value: stage2Gamma },
@@ -361,6 +355,7 @@ export function createReconPlayer({
       uniform float uTime;
       uniform float uSize;
       uniform float uReal;
+      uniform float uViewportScale;
       varying float vBand;
       varying float vGrain;
       varying vec4 vRGBA;
@@ -376,7 +371,7 @@ export function createReconPlayer({
         vGrain = aRand;
         vRGBA = aRGBA;
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        gl_PointSize = uSize * mix(1.12, 0.96, uQ) * (60.0 / -mv.z);
+        gl_PointSize = uSize * uViewportScale * mix(1.12, 0.96, uQ) * (60.0 / -mv.z);
         gl_Position = projectionMatrix * mv;
       }
     `,
@@ -417,6 +412,11 @@ export function createReconPlayer({
 
   const stage1Points = new THREE.Points(stage1.geo, stage1Mat);
   const stage2Points = new THREE.Points(stage2.geo, stage2Mat);
+  const drawSize = new THREE.Vector2();
+  stage2Points.onBeforeRender = (renderer, scene, camera) => {
+    renderer.getDrawingBufferSize(drawSize);
+    stage2Mat.uniforms.uViewportScale.value = reconPixelScale(drawSize.y, camera.projectionMatrix.elements[5]);
+  };
   /* A conservative fixed sphere covers normalized geometry plus the stylized
      noise shell, while still allowing off-camera stations to be culled. */
   stage1.geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 2.4);

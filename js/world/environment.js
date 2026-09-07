@@ -5,11 +5,11 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { clone as cloneSkinned } from "../../vendor/SkeletonUtils.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { instanceTemplate } from "../lib/three-perf.js?v=20260823-proxy-lod";
+import { STATIONS } from "./rail.js?v=20260907-ranch-drive-v6";
+import { instanceTemplate } from "../lib/three-perf.js?v=20260907-ranch-drive-v6";
 import { createBlobShadow } from "../lib/blob-shadow.js";
 import { createColliderSet } from "../lib/obb-collider.js";
-import { createCameraFlash } from "../lib/camera-flash.js?v=20260823-step05-visible-spin-step08-continuous";
+import { createCameraFlash } from "../lib/camera-flash.js?v=20260907-ranch-drive-v6";
 
 const AMBER = 0xe39b2d, ICE = 0x86d7ea;
 /* early dawn: deep-blue zenith, warm bright horizon, lifted fog */
@@ -273,6 +273,16 @@ export function groundHeight(x, z) {
 }
 
 /* ---------- terrain ---------- */
+
+// Match the triangles actually drawn by buildTerrain(), not just the analytic
+// noise field between its vertices. Ground decals otherwise cut into slopes.
+export function terrainSurfaceHeight(x,z) {
+  const step=240/144;
+  const ix=Math.floor((x+120)/step),iz=Math.floor((z+120)/step);
+  const x0=ix*step-120,z0=iz*step-120,u=(x-x0)/step,v=(z-z0)/step;
+  const a=groundHeight(x0,z0),b=groundHeight(x0+step,z0),c=groundHeight(x0,z0+step),d=groundHeight(x0+step,z0+step);
+  return u+v<=1 ? a+(b-a)*u+(c-a)*v : d+(c-d)*(1-u)+(b-d)*(1-v);
+}
 
 function buildTerrain() {
   /* 240 wide, not 160. Everything built on this ground lives inside +/-50 and
@@ -1150,6 +1160,8 @@ export async function buildEnvironment(scene, loader, onNote = () => {}) {
 
   return {
     update, setActiveLeg, groundHeight, collide, stationApproach, cowAsset,
+    surfaceHeight: terrainSurfaceHeight,
+    setRaceMode(on) { ribbon.mesh.visible = !on; },
     get gateFlash() { return rigFlash.state; }
   };
 }

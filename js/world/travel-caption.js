@@ -3,7 +3,7 @@
    Deliberately NOT class "ui": body.tour hides .ui, and this caption is the
    one piece of chrome the ?tour=1 narration keeps. */
 
-import { LEGS, hopCaption } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
+import { LEGS, hopCaption } from "./handoff-content.js?v=20260907-ranch-drive-v6";
 
 export function initTravelCaption() {
   try {

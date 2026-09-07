@@ -4,8 +4,8 @@
 
 import * as THREE from "../../vendor/three.module.js";
 import { CSS2DObject } from "../../vendor/CSS2DRenderer.js";
-import { STATIONS } from "./rail.js?v=20260823-step05-visible-spin-step08-continuous";
-import { IO, pad2 } from "./handoff-content.js?v=20260813-rgbd-pointcloud";
+import { STATIONS } from "./rail.js?v=20260907-ranch-drive-v6";
+import { IO, pad2 } from "./handoff-content.js?v=20260907-ranch-drive-v6";
 
 /* All numbers are the paper's real results — do not edit casually. */
 export const CONTENT = [
@@ -40,23 +40,23 @@ export const CONTENT = [
   {
     kicker: "STATION 04 · MULTI-VIEW RECONSTRUCTION",
     title: "Reconstruct three views by agreement.",
-    body: "This workcell receives three masked RGB views—not the single-view 3D result from Station 03. The center cloud keeps the original 51-step agreement evolution: mean agreement climbs from 0.78 to 0.99. Beside it, the real three-view trace shows Stage 1 agreement-driven weighting and Stage 2 multi-view structured-latent refinement.",
+    body: "Three masked views build one shared 3D animal. At each step, we compare each view's proposed update with their shared average. Closer updates get more weight. The method uses this fusion in both stages; the colored cloud here shows the recorded Stage-1 agreement field. Station 03 is a separate single-view baseline.",
     chips: ["ON-DEMAND 3-VIEW TRACE", "S1 SHARED AGREEMENT", "S2 MULTI-VIEW REFINEMENT"],
     figures: [{ src: "assets/figures/global_agreement.png", alt: "Global agreement over diffusion steps" }]
   },
   {
     kicker: "STATION 05 · COMPARE",
     title: "Same protocol, different geometry.",
-    body: "Five geometry sources rotate together for shape inspection, then feed the same downstream stacked-ensemble and 5-fold cross-validation protocol: the dataset RGB+D point cloud, average and entropy multi-view fusion, single-view TRELLIS2, and agreement-driven fusion. The RGB+D cattle crop retains registered colors from Subject 001's full AutoAligned point cloud through an exact coordinate join. Agreement reaches R² 0.69 using RGB alone, compared with 0.65 for the depth-sensor baseline.",
+    body: "Compare five reconstruction sources for the same animal: RGB+D, average fusion, entropy fusion, TRELLIS2, and agreement fusion. They share the paper's downstream feature extraction and evaluation protocol. The labels report results across 103 cattle. This is a comparison exhibit, separate from the image-to-weight inference pipeline.",
     chips: ["RGB+D · 99,082 POINTS · MAPE 6.77% · R² 0.65", "AVERAGE · MAPE 2.82% · R² 0.44", "ENTROPY · MAPE 2.73% · R² 0.47", "TRELLIS2 · MAPE 2.64% · R² 0.53", "AGREEMENT · MAPE 2.22% · R² 0.69"],
     figures: [{ src: "assets/figures/results/regression_MAPE.png", alt: "Dataset-level MAPE across weight-estimation models" }]
   },
   {
     kicker: "STATION 06 · FEATURES",
-    title: "Measured, not learned.",
+    title: "Body shape becomes a feature vector.",
     body: "The dais is an illustrative overlay computed from the 5941-point agreement payload in normalized model space (unit u). It mirrors the paper's five feature groups: global geometry (including box and hull), shape, coordinate percentiles, vertical density, and per-axis statistics. The paper's regression uses features extracted from each reconstructed point cloud; this world overlay is for inspection, not a Case 001 regression row.",
     chips: ["ILLUSTRATIVE OVERLAY", "5 PAPER FEATURE GROUPS", "FEATURES → ENSEMBLE"],
-    families: ["F(g)", "F(a)", "F(q)", "F(ρ)", "F(μ)", "HULL VIEW"],
+    families: ["GEOMETRY", "SHAPE", "PERCENTILES", "DENSITY", "STATISTICS", "HULL VIEW"],
     figures: []
   },
   {
@@ -85,9 +85,9 @@ const PIPELINE = [
   "WELCOME — RANCH GATE",
   "3×RGB CAPTURE — left · right · top",
   "SAM3 SEGMENTATION",
-  "SINGLE-VIEW SAM3D RECONSTRUCTION",
+  "BASELINE · SINGLE-VIEW SAM3D",
   "AGREEMENT-DRIVEN MULTI-VIEW RECONSTRUCTION",
-  "METHOD COMPARISON",
+  "COMPARISON · FIVE RECONSTRUCTION SOURCES",
   "GEOMETRIC FEATURE EXTRACTION",
   "STACKED-ENSEMBLE WEIGHT REGRESSION",
   "SPATIAL RGB-TO-KG FACTORY LINE"
@@ -209,8 +209,12 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
       `</button>`;
   }
 
-  function showStation(i, { open = true } = {}) {
-    if (i === 0) return showGate();
+  function showStation(i, { open = false } = {}) {
+    if (i === 0) {
+      showGate();
+      if (!open) hidePanel();
+      return;
+    }
     visited.add(i);
     refreshVisited();
     const c = CONTENT[i];
@@ -262,7 +266,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
         }));
     }
     setPanelOpen(open);
-    chipEl.textContent = `${STATIONS[i].num} / ${TOTAL} — ${STATIONS[i].name}`;
+    chipEl.textContent = `${STATIONS[i].num} / ${TOTAL} — ${STATIONS[i].name} · DETAILS`;
     setDots(i);
     setLeg(i);   // every arrival path (rail, roam, tour) funnels through here
   }
@@ -299,7 +303,7 @@ export function initPanels({ panelEl, dotsEl, chipEl, onGoto, onFamily }) {
       `<p class="panel-kicker hud-mono">MV-SAM3D · PIPELINE</p>` +
       `<p class="panel-scope hud-mono">INTERACTIVE PAPER MAP</p>` +
       `<h2>Three cameras to kilograms.</h2>` +
-      `<p class="panel-body">The gate and eight stations retrace the method end-to-end. Click a step to fly there, or orbit and zoom the ranch freely — click any exhibit to visit it.</p>` +
+      `<p class="panel-body">Follow three views through masks, agreement fusion, features and weight estimation. Steps 03 and 05 are comparison stops. Choose any station to inspect it; open DETAILS when you want to read more.</p>` +
       `<div class="pipe-rows">${pipelineRowsHTML()}</div>` +
       `<button id="btnStartTour" class="hud-mono" type="button">START AT THE GATE →</button>`;
     wirePanelChrome();

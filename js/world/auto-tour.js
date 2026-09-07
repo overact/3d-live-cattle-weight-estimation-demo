@@ -10,13 +10,13 @@ export const AUTO_TOUR_KEY = "KeyT";
 export const AUTO_TOUR_STEPS = Object.freeze([
   {
     index: 0, number: "00", title: "From three views to one weight.",
-    narration: "Welcome to Agreement Ranch. We start with three RGB images—left, right, and top—and follow them through reconstruction, measurement, and weight estimation. By the end of the tour, those three views become one number in kilograms.",
-    speech: "Welcome to Agreement Ranch. We start with three R G B images, from the left, right, and top, and follow them through reconstruction, measurement, and weight estimation. By the end of the tour, those three views become one number in kilograms.",
+    narration: "Welcome to Agreement Ranch. How can three photos help estimate a cow's weight? Follow one animal from left, right, and top views to a shared 3D shape, body measurements, and a weight estimate. Along the way, we will stop at two comparison exhibits.",
+    speech: "Welcome to Agreement Ranch. How can three photos help estimate a cow's weight? Follow one animal from left, right, and top views to a shared three D shape, body measurements, and a weight estimate. Along the way, we will stop at two comparison exhibits.",
   },
   {
     index: 1, number: "01", title: "Capture three views at once.",
-    narration: "First, three synchronized cameras photograph the animal from the left, right, and top. Each camera sees a different part of the body, and together the views provide a fuller picture of its shape.",
-    speech: "First, three synchronized cameras photograph the animal from the left, right, and top. Each camera sees a different part of the body, and together the views provide a fuller picture of its shape.",
+    narration: "We start with matched left, right, and top RGB views of the same animal. Each view reveals a different part of the body. Together, they give reconstruction more information than one image alone.",
+    speech: "We start with matched left, right, and top R G B views of the same animal. Each view reveals a different part of the body. Together, they give reconstruction more information than one image alone.",
   },
   {
     index: 2, number: "02", title: "Isolate the animal.",
@@ -25,13 +25,13 @@ export const AUTO_TOUR_STEPS = Object.freeze([
   },
   {
     index: 3, number: "03", title: "Build a single-view reference.",
-    narration: "We begin reconstruction with a single view. Fifty steps establish the coarse body shape, and twenty-five more sharpen the geometry. This gives us a clear reference for what one image can produce.",
-    speech: "We begin reconstruction with a single view. Fifty steps establish the coarse body shape, and twenty-five more sharpen the geometry. This gives us a clear reference for what one image can produce.",
+    narration: "First, a comparison: what can one image produce? This recorded single-view run builds a coarse shape in fifty steps, then refines it in twenty-five more. It is our baseline. Next, we will start from all three images and reconstruct them together.",
+    speech: "First, a comparison: what can one image produce? This recorded single-view run builds a coarse shape in fifty steps, then refines it in twenty-five more. It is our baseline. Next, we will start from all three images and reconstruct them together.",
   },
   {
     index: 4, number: "04", title: "Fuse the views by agreement.",
-    narration: "Now the other views join in. When their updates point to the same geometry, the method gives them more influence. When they conflict, it gives them less. That agreement forms the shared body shape, which a second stage then refines.",
-    speech: "Now the other views join in. When their updates point to the same geometry, the method gives them more influence. When they conflict, it gives them less. That agreement forms the shared body shape, which a second stage then refines.",
+    narration: "Here is our main idea: views that agree get more influence. At each step, the three views propose updates. We compare them with their shared average and give closer updates more weight. This fusion builds and refines one shared 3D animal across both stages. The colored field shows agreement during Stage 1.",
+    speech: "Here is our main idea: views that agree get more influence. At each step, the three views propose updates. We compare them with their shared average and give closer updates more weight. This fusion builds and refines one shared three D animal across both stages. The colored field shows agreement during stage one.",
   },
   {
     index: 5, number: "05", title: "Compare five reconstruction routes.",
@@ -40,8 +40,8 @@ export const AUTO_TOUR_STEPS = Object.freeze([
   },
   {
     index: 6, number: "06", title: "Turn geometry into measurements.",
-    narration: "The point cloud now becomes a compact set of body measurements: length, width, height, volume, density, and shape statistics. Together, these measurements form the feature vector used by the weight regressor.",
-    speech: "The point cloud now becomes a compact set of body measurements. Length, width, height, volume, density, and shape statistics. Together, these measurements form the feature vector used by the weight regressor.",
+    narration: "How does shape become kilograms? We extract dimensions, volume-related features, density, and shape statistics. Eleven regression models predict weight from the same feature vector. A final Ridge model combines their predictions. Here, normalized-space overlays make those feature groups easy to inspect.",
+    speech: "How does shape become kilograms? We extract dimensions, volume-related features, density, and shape statistics. Eleven regression models predict weight from the same feature vector. A final Ridge model combines their predictions. Here, normalized-space overlays make those feature groups easy to inspect.",
   },
   {
     index: 7, number: "07", title: "See the result across 103 cattle.",
@@ -50,8 +50,8 @@ export const AUTO_TOUR_STEPS = Object.freeze([
   },
   {
     index: 8, number: "08", title: "Watch the full pipeline run.",
-    narration: "To finish, watch the whole pipeline move as one. Three cameras capture the animal, reconstruction builds the point cloud, feature extraction measures the body, and the display settles at 480 kg. Three images in; one weight estimate out.",
-    speech: "To finish, watch the whole pipeline move as one. Three cameras capture the animal, reconstruction builds the point cloud, feature extraction measures the body, and the display settles at 480 kilograms. Three images in. One weight estimate out.",
+    narration: "To finish, imagine the workflow on a farm: capture three views, reconstruct the animal, measure its shape, and estimate its weight. This deployment animation uses our recorded example, with an illustrative 480 kg display. The idea is simple: three images, useful 3D geometry, one weight estimate.",
+    speech: "To finish, imagine the workflow on a farm: capture three views, reconstruct the animal, measure its shape, and estimate its weight. This deployment animation uses our recorded example, with an illustrative four hundred and eighty kilogram display. The idea is simple: three images, useful three D geometry, one weight estimate.",
     /* The deployment line itself supplies the completion event. The cattle
        remains standing; no authored emote competes with the hand-off. */
   }
@@ -82,6 +82,7 @@ export function createAutoTour({
   let cycleNumber = 0;
   let completedSteps = 0;
   let completion = { narration: false, exhibit: false };
+  let exhibitMessage = "";
   let lastStopReason = null;
 
   const step = () => AUTO_TOUR_STEPS[stepIndex];
@@ -97,6 +98,7 @@ export function createAutoTour({
   function latchCompletion() {
     if (phase !== "dwell") return;
     const state = getCompletionState({ stepIndex, step: step(), completion }) || {};
+    exhibitMessage = state.message || "";
     completion.narration ||= !!state.narration;
     completion.exhibit ||= !!state.exhibit;
   }
@@ -106,11 +108,11 @@ export function createAutoTour({
     return {
       active,
       phase,
-      phaseLabel: phase === "approach"
+      phaseLabel: exhibitMessage || (phase === "approach"
         ? `RUNNING TO STEP ${current.number}`
         : completion.narration && !completion.exhibit
           ? `WATCHING STEP ${current.number}`
-          : `EXPLAINING STEP ${current.number}`,
+          : `EXPLAINING STEP ${current.number}`),
       stepIndex,
       stepNumber: current.number,
       title: current.title,
@@ -142,6 +144,7 @@ export function createAutoTour({
     phase = "approach";
     phaseElapsed = 0;
     completion = { narration: false, exhibit: false };
+    exhibitMessage = "";
     travelTo(stepIndex);
     emitState(eventType);
   }
@@ -178,11 +181,24 @@ export function createAutoTour({
       cycleNumber = 0;
       completedSteps = 0;
       completion = { narration: false, exhibit: false };
+      exhibitMessage = "";
       lastStopReason = null;
       travelTo(stepIndex);
       emitState("start");
       emitFrame();
       return stepIndex;
+    },
+
+    selectStep(nextIndex) {
+      if (!active) return false;
+      cancelTravel();
+      startIndex = clampTourStepIndex(nextIndex);
+      completedSteps = 0; cycleElapsed = 0;
+      // A new narration visit, not a stop/start of the presentation mode.
+      // The voice adapter clears its dedupe key even when reselecting a Step.
+      beginApproach(startIndex, "start");
+      emitFrame();
+      return true;
     },
 
     stop(reason = "manual") {

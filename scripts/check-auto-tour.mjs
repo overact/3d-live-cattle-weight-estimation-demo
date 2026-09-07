@@ -3,7 +3,7 @@ import {
   AUTO_TOUR_STEPS,
   clampTourStepIndex,
   createAutoTour
-} from "../js/world/auto-tour.js?v=20260829-spoken-tour-v7";
+} from "../js/world/auto-tour.js?v=20260907-ranch-drive-v6";
 
 assert.equal(AUTO_TOUR_STEPS.length, 9, "tour must cover Steps 00-08");
 assert.deepEqual(AUTO_TOUR_STEPS.map((step) => step.index), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
@@ -14,8 +14,6 @@ for (const step of AUTO_TOUR_STEPS) {
       `Step ${step.number} must not carry timer-driven presentation policy (${obsolete})`);
   }
   for (const defensiveAside of [
-    /recorded evidence/i,
-    /simulated/i,
     /not a live prediction/i,
     /not claiming/i,
     /perfect geometry/i
@@ -24,6 +22,9 @@ for (const step of AUTO_TOUR_STEPS) {
       `Step ${step.number} must stay in presenter voice without defensive asides`);
   }
 }
+assert.match(AUTO_TOUR_STEPS[3].narration, /baseline/i);
+assert.match(AUTO_TOUR_STEPS[4].narration, /both stages/i);
+assert.match(AUTO_TOUR_STEPS[8].narration, /illustrative 480 kg/i);
 
 assert.equal(clampTourStepIndex(undefined), 0);
 assert.equal(clampTourStepIndex(-20), 0);
@@ -124,4 +125,18 @@ function assertInterruptsCleanly(arriveFirst, expectedPhase) {
 assertInterruptsCleanly(false, "approach");
 assertInterruptsCleanly(true, "dwell");
 
-console.log("Auto tour verified: arrival + narration + exhibit events, no dwell thresholds.");
+const selections=[],selectionEvents=[];
+let selectedPose={nearStation:0,grounded:true,autoTarget:null};
+const selectionTour=createAutoTour({travelTo:i=>selections.push(i),getRoamState:()=>selectedPose,
+  getCompletionState:()=>({narration:false,exhibit:true}),onState:s=>selectionEvents.push(s)});
+selectionTour.start(0);selectionTour.update(.01);
+selectionTour.selectStep(4);
+assert.equal(selectionTour.active,true);assert.equal(selectionTour.qaState.phase,"approach");
+assert.equal(selectionTour.qaState.stepIndex,4);assert.equal(selectionTour.qaState.lastStopReason,null);
+selectedPose={nearStation:4,grounded:true,autoTarget:null};selectionTour.update(.01);
+assert.equal(selectionTour.qaState.phase,"dwell");
+selectionTour.selectStep(2);selectionTour.selectStep(4);
+assert.deepEqual(selections,[0,4,2,4]);
+assert.equal(selectionEvents.some(s=>s.type==="stop"),false,"step selection never exits narration mode");
+assert.equal(selectionEvents.at(-1).type,"start","same-step reselect resets voice deduplication");
+console.log("Auto tour verified: arrival, narration barriers, and Step selection without mode exit.");
