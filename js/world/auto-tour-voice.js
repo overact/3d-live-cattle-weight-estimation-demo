@@ -4,31 +4,11 @@
    narration begins once the cattle reaches a Step, is cancelled before the
    next run, and stops synchronously when the visitor takes control. */
 
-function selectEnglishVoice(synth) {
-  const voices = typeof synth?.getVoices === "function" ? synth.getVoices() : [];
-  const english = voices.filter((voice) => /^en(?:-|_)/i.test(voice.lang || ""));
-  const neuralNames = /natural|neural|premium|enhanced|online/i;
-  const polishedNames = /aria|jenny|guy|andrew|ava|samantha|daniel|google.*english/i;
-  const legacyNames = /espeak|festival|flite/i;
-  return english
-    .map((voice, order) => ({
-      voice,
-      order,
-      score: (neuralNames.test(voice.name || "") ? 40 : 0) +
-        (polishedNames.test(voice.name || "") ? 20 : 0) +
-        (/^en(?:-|_)US/i.test(voice.lang || "") ? 6 : 0) +
-        (voice.default ? 1 : 0) -
-        (legacyNames.test(voice.name || "") ? 30 : 0)
-    }))
-    .sort((a, b) => b.score - a.score || a.order - b.order)[0]?.voice || null;
-}
-
 export function createAutoTourVoice({
-  synth = globalThis.speechSynthesis,
-  Utterance = globalThis.SpeechSynthesisUtterance,
+  Audio = globalThis.Audio,
   now = () => performance.now()
 } = {}) {
-  const available = !!synth && typeof synth.speak === "function" && typeof Utterance === "function";
+  const available = typeof Audio === "function";
   let enabled = available;
   let speaking = false;
   let queued = false;
@@ -44,10 +24,16 @@ export function createAutoTourVoice({
   let readingMs = 0;
   let finished = false;
   let generation = 0;
+  let audio = null;
 
   function cancel() {
-    generation += 1; // late callbacks from cancelled utterances cannot release a new Step
-    if (available) synth.cancel();
+    generation += 1; // late callbacks from cancelled audio cannot release a new Step
+    if (audio) {
+      audio.pause();
+      audio.removeAttribute("src");
+      audio.load();
+      audio = null;
+    }
     cancellations += 1;
     speaking = false;
     queued = false;
@@ -55,8 +41,7 @@ export function createAutoTourVoice({
 
   function speak(state) {
     if (state?.phase !== "dwell") return false;
-    /* The subtitle can keep compact notation (RGB, R², 2.22%), while the
-       spoken copy uses words and punctuation that browser voices phrase well. */
+    // Keep the spoken transcript available to the HUD and caption fallback.
     const text = String(state.speech || state.narration || "").trim();
     if (!text) return false;
     const key = `${state.cycleNumber ?? 0}:${state.completedSteps ?? 0}:${state.stepIndex ?? 0}`;
@@ -71,39 +56,45 @@ export function createAutoTourVoice({
     finished = false;
     if (!available || !enabled) return true; // readable, paced captions without audio
     const requestGeneration = generation;
-    const utterance = new Utterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
-    const voice = selectEnglishVoice(synth);
-    if (voice) {
-      utterance.voice = voice;
-      lastVoice = voice.name || "";
-    } else {
-      lastVoice = "Browser default English";
+    const fail = (error) => {
+      if (requestGeneration !== generation) return;
+      cancel();
+      lastError = error;
+    };
+    if (!Number.isInteger(state.stepIndex) || state.stepIndex < 0 || state.stepIndex > 8) {
+      fail("audio-step-unavailable");
+      return true;
     }
-    utterance.onstart = () => {
-      if (requestGeneration !== generation) return;
-      speaking = true; queued = false;
-    };
-    utterance.onend = () => {
-      if (requestGeneration !== generation) return;
-      speaking = false;
-      queued = false;
-      finished = true;
-      completions += 1;
-    };
-    utterance.onerror = (event) => {
-      if (requestGeneration !== generation) return;
-      speaking = false;
-      queued = false;
-      lastError = String(event?.error || "speech-error");
-    };
+    lastVoice = "Sulafat";
     queued = true;
     requests += 1;
-    try { synth.speak(utterance); }
-    catch { utterance.onerror({ error: "synthesis-failed" }); }
+    try {
+      const clip = new Audio(new URL(
+        `../../assets/audio/sulafat/step-${String(state.stepIndex).padStart(2, "0")}.mp3`,
+        import.meta.url
+      ).href);
+      audio = clip;
+      clip.preload = "auto";
+      clip.onloadedmetadata = () => {
+        if (requestGeneration !== generation) return;
+        if (Number.isFinite(clip.duration)) readingMs = Math.max(readingMs, clip.duration * 1000 + 1000);
+      };
+      clip.onplaying = () => {
+        if (requestGeneration !== generation) return;
+        speaking = true; queued = false;
+      };
+      clip.onended = () => {
+        if (requestGeneration !== generation) return;
+        speaking = false;
+        queued = false;
+        finished = true;
+        completions += 1;
+      };
+      clip.onerror = () => fail("audio-load-failed");
+      clip.play()?.catch(() => fail("audio-play-failed"));
+    } catch {
+      fail("audio-play-failed");
+    }
     return true;
   }
 
@@ -138,10 +129,10 @@ export function createAutoTourVoice({
 
     get qaState() {
       const elapsed = now() - startedAt;
-      if (current && ((queued && elapsed > 5000) ||
+      if (current && ((queued && elapsed > 15000) ||
           (speaking && elapsed > readingMs * 2 + 5000))) {
         cancel();
-        lastError = "speech-timeout";
+        lastError = "audio-timeout";
       }
       const captionMode = !available || !enabled || !!lastError;
       const complete = !current || finished || (captionMode && elapsed >= readingMs);
@@ -160,7 +151,7 @@ export function createAutoTourVoice({
         lastText,
         lastVoice,
         lastError,
-        provider: "Browser speech synthesis"
+        provider: "Gemini TTS · Sulafat (prerecorded)"
       };
     }
   };

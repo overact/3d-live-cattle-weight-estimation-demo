@@ -16,7 +16,7 @@ The earlier Overview and Film pages are intentionally not included in this publi
 
 ## Interactive auto tour
 
-All three exhibition entrances arrive at **Step 00 with a manually controlled calf**. The English-voice entrance prepares the same playable starting point; press **T** / **AUTO EN** in the world to begin a continuously looping English presentation through Steps 00–08. Physical arrival starts each Step; departure waits for narration, exhibit playback, and any artifact handoff to finish. Muted, unavailable, or stalled browser speech falls back to a word-count-based subtitle reading interval. The deployment Step also waits for its kg-result event. The HUD voice control can mute or replay the current Step narration.
+All three exhibition entrances arrive at **Step 00 with a manually controlled calf**. The English-voice entrance prepares the same playable starting point; press **T** / **AUTO EN** in the world to begin a continuously looping English presentation through Steps 00–08. Physical arrival starts each Step; departure waits for narration, exhibit playback, and any artifact handoff to finish. The tour plays nine local Sulafat recordings generated with `gemini-3.1-flash-tts-preview`; no API key or speech service is needed during playback. Muted, unavailable, or stalled audio falls back to a word-count-based subtitle reading interval. The deployment Step also waits for its kg-result event. The HUD voice control can mute or replay the current Step narration.
 
 Station details start collapsed and open on demand. Desktop framing leaves room for an open inspector, while mobile controls wrap to keep navigation accessible. During a focused presentation, neighboring exhibits are hidden to reduce visual clutter and rendering work.
 

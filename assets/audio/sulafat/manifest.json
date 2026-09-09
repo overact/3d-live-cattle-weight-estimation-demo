@@ -1,0 +1,82 @@
+{
+  "model": "gemini-3.1-flash-tts-preview",
+  "voice": "Sulafat",
+  "language": "en",
+  "source": "js/world/auto-tour.js",
+  "steps": [
+    {
+      "step": 0,
+      "title": "From three views to one weight.",
+      "text": "Welcome to Agreement Ranch. How can three photos help estimate a cow's weight? Follow one animal from left, right, and top views to a shared three D shape, body measurements, and a weight estimate. Along the way, we will stop at two comparison exhibits.",
+      "duration_seconds": 20.76,
+      "wav": "step-00.wav",
+      "mp3": "step-00.mp3"
+    },
+    {
+      "step": 1,
+      "title": "Capture three views at once.",
+      "text": "We start with matched left, right, and top R G B views of the same animal. Each view reveals a different part of the body. Together, they give reconstruction more information than one image alone.",
+      "duration_seconds": 14.92,
+      "wav": "step-01.wav",
+      "mp3": "step-01.mp3"
+    },
+    {
+      "step": 2,
+      "title": "Isolate the animal.",
+      "text": "Next, Sam three separates the cattle from the background in every image. Grass, fences, and sky fall away, leaving clean silhouettes for reconstruction.",
+      "duration_seconds": 13.04,
+      "wav": "step-02.wav",
+      "mp3": "step-02.mp3"
+    },
+    {
+      "step": 3,
+      "title": "Build a single-view reference.",
+      "text": "First, a comparison: what can one image produce? This recorded single-view run builds a coarse shape in fifty steps, then refines it in twenty-five more. It is our baseline. Next, we will start from all three images and reconstruct them together.",
+      "duration_seconds": 20.16,
+      "wav": "step-03.wav",
+      "mp3": "step-03.mp3"
+    },
+    {
+      "step": 4,
+      "title": "Fuse the views by agreement.",
+      "text": "Here is our main idea: views that agree get more influence. At each step, the three views propose updates. We compare them with their shared average and give closer updates more weight. This fusion builds and refines one shared three D animal across both stages. The colored field shows agreement during stage one.",
+      "duration_seconds": 25.32,
+      "wav": "step-04.wav",
+      "mp3": "step-04.mp3"
+    },
+    {
+      "step": 5,
+      "title": "Compare five reconstruction routes.",
+      "text": "With the reconstructions ready, we place five routes side by side. Agreement fusion, simple averaging, entropy weighting, Trellis point two, and R G B plus depth. Each route continues through the same feature extraction and weight estimator, making the final results easy to compare.",
+      "duration_seconds": 20.48,
+      "wav": "step-05.wav",
+      "mp3": "step-05.mp3"
+    },
+    {
+      "step": 6,
+      "title": "Turn geometry into measurements.",
+      "text": "How does shape become kilograms? We extract dimensions, volume-related features, density, and shape statistics. Eleven regression models predict weight from the same feature vector. A final Ridge model combines their predictions. Here, normalized-space overlays make those feature groups easy to inspect.",
+      "duration_seconds": 23.8,
+      "wav": "step-06.wav",
+      "mp3": "step-06.mp3"
+    },
+    {
+      "step": 7,
+      "title": "See the result across 103 cattle.",
+      "text": "Across 103 cattle and five-fold cross validation, agreement fusion reaches a MAPE of 2.22 percent and an R squared of 0.69. Those figures summarize the full journey from images to estimated weight.",
+      "duration_seconds": 18.52,
+      "wav": "step-07.wav",
+      "mp3": "step-07.mp3"
+    },
+    {
+      "step": 8,
+      "title": "Watch the full pipeline run.",
+      "text": "To finish, imagine the workflow on a farm: capture three views, reconstruct the animal, measure its shape, and estimate its weight. This deployment animation uses our recorded example, with an illustrative four hundred and eighty kilogram display. The idea is simple: three images, useful three D geometry, one weight estimate.",
+      "duration_seconds": 25.64,
+      "wav": "step-08.wav",
+      "mp3": "step-08.mp3"
+    }
+  ],
+  "full_audio": "full-tour.mp3",
+  "style": "Speak as a friendly researcher guiding one visitor through an interactive science exhibit. Use warm, conversational English, natural pauses, subtle emphasis, and a relaxed, understated delivery. Aim for about 145 words per minute. Keep a consistent voice throughout. Read only the transcript exactly, without an introduction or extra commentary."
+}

@@ -18,7 +18,7 @@ import { initReaderGuide } from "./reader-guide.js?v=20260907-ranch-drive-v6";
 import { initRoam } from "./roam.js?v=20260907-ranch-drive-v6";
 import { createAutoTour } from "./auto-tour.js?v=20260907-ranch-drive-v6";
 import { initAutoTourHud } from "./auto-tour-hud.js?v=20260907-ranch-drive-v6";
-import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260907-ranch-drive-v6";
+import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260909-sulafat";
 import { createRanchRace } from "./race.js?v=20260907-ranch-drive-v6";
 import { exhibitCompletion } from "./tour-completion.js";
 import { createPipelineCarry } from "./pipeline-carry.js?v=20260907-ranch-drive-v6";
