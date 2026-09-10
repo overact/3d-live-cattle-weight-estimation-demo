@@ -47,6 +47,13 @@ export function createFullscreenControl(button, doc = globalThis.document) {
     button.setAttribute("aria-pressed", active ? "true" : "false");
     button.setAttribute("aria-label", active ? EXIT_LABEL : ENTER_LABEL);
     button.setAttribute("title", active ? EXIT_TITLE : ENTER_TITLE);
+    /* One flag for the stylesheet: while presenting, the toggle steps out of the
+       presenter's frame on pointer devices and the control legend swaps to the
+       way back. Touch devices keep the button — they have no Esc key. */
+    const root = doc.documentElement;
+    if (root && root.classList && typeof root.classList.toggle === "function") {
+      root.classList.toggle("is-presenting", active);
+    }
   }
 
   function report(err) {

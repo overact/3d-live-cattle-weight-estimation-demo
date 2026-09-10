@@ -671,6 +671,18 @@ body.world-painted #worldWrap { opacity: 1; }
 .fullscreen-btn[aria-pressed="true"] .fullscreen-btn__icon--enter { display: none; }
 .fullscreen-btn[aria-pressed="true"] .fullscreen-btn__icon--exit { display: block; }
 
+/* Once the presentation is running the toggle steps out of the frame on
+   pointer devices: Esc and V both leave fullscreen and the browser shows its
+   own exit hint, so a floating control is only clutter over the exhibit. Touch
+   devices keep it — with no Esc key it is the way back. */
+@media (hover: hover) and (pointer: fine) {
+  .fullscreen-btn[aria-pressed="true"] { display: none; }
+  html.is-presenting .hint--desktop { display: none; }
+  html.is-presenting .hint--presenting { display: block; }
+}
+/* the way out, shown only while presenting on those same devices */
+.hint--presenting { display: none; }
+
 .dot.active {
   color: var(--night);
   background: var(--amber);
@@ -1786,11 +1798,12 @@ body.auto-tour-active #dots .dot-link { display: none; }
 body.auto-tour-active #btnAutoTour { width: auto; }
 
 /* ---------- fullscreen toggle on small screens ---------- */
-/* The centered nav pill stays narrow enough that the corner is still free at
-   320px; the travel caption sits at top: 62px, below this button. */
+/* Below the page nav, level with the station toggle: a phone nav pill wraps to
+   two lines and spans nearly the whole width (measured 8..385 of 393 at Pixel
+   5), which swallowed this button when it sat in the corner. */
 @media (max-width: 640px) {
   .fullscreen-btn {
-    top: max(8px, env(safe-area-inset-top));
+    top: calc(62px + env(safe-area-inset-top));
     right: 10px;
     width: 2.2rem;
     height: 2.2rem;

@@ -255,13 +255,39 @@ console.warn = (...args) => warnings.push(args.join(" "));
   assert.equal(doc.requests, 1, "and nothing in the ?tour=1 recorder frame");
 }
 
+/* ---------- the toggle steps aside while presenting ---------- */
+{
+  const doc = makeDoc();
+  const classes = new Set();
+  doc.documentElement.classList = {
+    toggle(name, on) { if (on) classes.add(name); else classes.delete(name); }
+  };
+  const button = makeButton();
+  const control = createFullscreenControl(button, doc);
+
+  assert.equal(classes.has("is-presenting"), false, "the world starts out not presenting");
+  button.click();
+  await flush();
+  assert.equal(classes.has("is-presenting"), true, "entering fullscreen raises the presenting flag");
+  doc.fullscreenElement = null;
+  doc.emit("fullscreenchange");
+  assert.equal(classes.has("is-presenting"), false, "the native Escape exit lowers it again");
+  doc.fullscreenElement = doc.documentElement;
+  doc.emit("fullscreenchange");
+  assert.equal(classes.has("is-presenting"), true, "and the flag follows every change, not just clicks");
+  button.click();
+  await flush();
+  assert.equal(classes.has("is-presenting"), false);
+}
+
 console.warn = realWarn;
 
 /* ---------- static wiring ---------- */
 /* One query per changed file: the stylesheets have not moved since the feature
    landed, the toggle module moved to clear a cached failure, and main.js moved
    with both. */
-const CSS_VERSION = "20260910-fullscreen";
+const CSS_VERSION = "20260910-present";      // world.css
+const RACE_VERSION = "20260910-fullscreen";  // race.css, untouched since the feature landed
 const VERSION = "20260910-present";      // present-mode.js itself
 const MAIN_VERSION = "20260910-present";
 const ranchHtml = read("index.html");
@@ -279,7 +305,7 @@ for (const fragment of [
 }
 for (const fragment of [
   `css/world.css?v=${CSS_VERSION}`,
-  `css/race.css?v=${CSS_VERSION}`,
+  `css/race.css?v=${RACE_VERSION}`,
   `js/world/main.js?v=${MAIN_VERSION}`
 ]) {
   /* the runtime changed, so the cache-busting query must have moved with it */
@@ -317,7 +343,13 @@ for (const fragment of [
   ".fullscreen-btn[hidden] { display: none !important; }",
   '.fullscreen-btn[aria-pressed="true"] .fullscreen-btn__icon--exit { display: block; }',
   ".auto-tour-hud, .fullscreen-btn",
-  "@media (max-width: 640px) {\n  .fullscreen-btn {"
+  "@media (max-width: 640px) {\n  .fullscreen-btn {",
+  /* a phone nav pill wraps across the width: the toggle has to clear it */
+  "top: calc(62px + env(safe-area-inset-top));",
+  /* the toggle must leave the presenter's frame where a keyboard can bring it
+     back, and stay put where there is no Esc key */
+  "@media (hover: hover) and (pointer: fine) {\n  .fullscreen-btn[aria-pressed=\"true\"] { display: none; }",
+  "html.is-presenting .hint--presenting { display: block; }"
 ]) {
   if (!worldCss.includes(fragment)) throw new Error(`css/world.css is missing ${fragment}`);
 }
@@ -331,6 +363,10 @@ if (!worldCss.includes("body.tour .ui,") || !raceCss.includes("body.race-active 
    to say so. The guard is inline in index.html; run it here with a stub DOM. */
 const reporterSource = ranchHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
 if (!reporterSource) throw new Error("index.html has no inline world-failure reporter");
+if (!ranchHtml.includes('class="hint hint--presenting hud-mono ui"') ||
+    !ranchHtml.includes('class="hint hint--desktop hud-mono ui"')) {
+  throw new Error("index.html must carry both the standing legend and the presenting one");
+}
 if (ranchHtml.indexOf("<script>") > ranchHtml.indexOf('<script type="module"')) {
   throw new Error("the failure reporter must run before the world module script");
 }

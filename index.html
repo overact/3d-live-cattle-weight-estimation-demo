@@ -9,7 +9,7 @@
     <link rel="preload" href="assets/fonts/ArchivoBlack-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="assets/fonts/Archivo-400.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="assets/fonts/fonts.css">
-    <link rel="stylesheet" href="css/world.css?v=20260910-fullscreen">
+    <link rel="stylesheet" href="css/world.css?v=20260910-present">
     <link rel="stylesheet" href="css/race.css?v=20260910-fullscreen">
     <link rel="stylesheet" href="css/global-nav.css">
   </head>
@@ -92,7 +92,11 @@
       </footer>
     </section>
 
-    <p class="hint hud-mono ui">L-DRAG ORBIT · R-DRAG PAN · CTRL+L / SCROLL ZOOM · CLICK EXHIBITS · C ROAM · V FULLSCREEN · ESC MAP</p>
+    <p class="hint hint--desktop hud-mono ui">L-DRAG ORBIT · R-DRAG PAN · CTRL+L / SCROLL ZOOM · CLICK EXHIBITS · C ROAM · V FULLSCREEN · ESC MAP</p>
+    <!-- while presenting, the toggle leaves the frame and this legend replaces
+         the one above, so the way back stays on screen (pointer devices only;
+         touch keeps the button instead) -->
+    <p class="hint hint--presenting hud-mono ui" aria-hidden="true">ESC OR V · LEAVE FULLSCREEN</p>
     <!-- touch legend: only ever shown on small screens while body.roaming,
          where the keyboard legend above is display:none -->
     <p class="hint hint--touch hud-mono ui">TAP A NUMBER TO WALK THERE · DRAG TO LOOK · 🐮 EXIT</p>
