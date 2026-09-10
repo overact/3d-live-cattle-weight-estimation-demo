@@ -208,10 +208,12 @@ console.warn = (...args) => warnings.push(args.join(" "));
 console.warn = realWarn;
 
 /* ---------- static wiring ---------- */
-const VERSION = "20260910-fullscreen";
-/* main.js itself changed when the graph was made fail-soft, so its own query
-   moved without dragging the unchanged stylesheets along */
-const MAIN_VERSION = "20260910-failsoft";
+/* One query per changed file: the stylesheets have not moved since the feature
+   landed, the toggle module moved to clear a cached failure, and main.js moved
+   with both. */
+const CSS_VERSION = "20260910-fullscreen";
+const VERSION = "20260910-fs2";          // fullscreen.js itself
+const MAIN_VERSION = "20260910-failsoft2";
 const ranchHtml = read("index.html");
 const worldMain = read("js/world/main.js");
 const worldCss = read("css/world.css");
@@ -226,8 +228,8 @@ for (const fragment of [
   if (!ranchHtml.includes(fragment)) throw new Error(`index.html is missing the fullscreen toggle: ${fragment}`);
 }
 for (const fragment of [
-  `css/world.css?v=${VERSION}`,
-  `css/race.css?v=${VERSION}`,
+  `css/world.css?v=${CSS_VERSION}`,
+  `css/race.css?v=${CSS_VERSION}`,
   `js/world/main.js?v=${MAIN_VERSION}`
 ]) {
   /* the runtime changed, so the cache-busting query must have moved with it */
@@ -239,7 +241,8 @@ for (const fragment of [
   "loadFullscreenControl",
   `"./fullscreen.js?v=${VERSION}"`,
   'loadFullscreenControl(document.getElementById("btnFullscreen"))',
-  "fullscreen toggle unavailable"
+  "fullscreen toggle unavailable",
+  'reason: "module-unavailable"'
 ]) {
   if (!worldMain.includes(fragment)) throw new Error(`js/world/main.js is missing ${fragment}`);
 }

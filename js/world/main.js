@@ -210,13 +210,17 @@ renderOpeningGuide(0);
    stays static on purpose: the world genuinely cannot run without them. */
 async function loadFullscreenControl(button) {
   try {
-    const { createFullscreenControl } = await import("./fullscreen.js?v=20260910-fullscreen");
+    const { createFullscreenControl } = await import("./fullscreen.js?v=20260910-fs2");
     return createFullscreenControl(button);
   } catch (err) {
-    console.warn("fullscreen toggle unavailable:", err);
+    /* The button stays hidden, so leave a trail a visitor can read back:
+       `__world.fullscreen.state` names the reason and the console names the
+       request. A cached failure is the usual cause after a partial deploy —
+       moving the module URL (the -fs2 query) is what clears it. */
+    console.warn("fullscreen toggle unavailable — its module could not be loaded, so the button stays hidden:", err);
     button.hidden = true;
     return {
-      get state() { return { supported: false, active: false, hidden: true }; },
+      get state() { return { supported: false, active: false, hidden: true, reason: "module-unavailable" }; },
       isActive: () => false,
       enter: () => Promise.resolve(false),
       exit: () => Promise.resolve(false),
