@@ -14,6 +14,10 @@ Quick access: [Ranch](https://overact.github.io/3d-live-cattle-weight-estimation
 
 The earlier Overview and Film pages are intentionally not included in this public repository or its deployment.
 
+### Fullscreen
+
+The ranch carries a fullscreen toggle in the top-right corner, deliberately outside the dock: the dock is trimmed to **AUTO EN** during the narrated tour and hidden outright in Gaming mode, where the toggle re-anchors above the footer buttons instead. Clicking the icon presents the whole page — world, HUD and narration — fullscreen and flips the icon to its exit state; **Esc** leaves fullscreen again. The control never guesses: it reads state back from `fullscreenchange`, so a native Esc exit re-syncs the icon, and while fullscreen is active a capture-phase guard consumes any page-visible **Esc** so the map toggle, the free-roam exit and the Gaming-mode exit wait for the next press. It hides itself on browsers without element fullscreen (iPhone Safari), and `?tour=1` keeps it out of the recorder frame.
+
 ## Interactive auto tour
 
 All three exhibition entrances arrive at **Step 00 with a manually controlled calf**. The English-voice entrance prepares the same playable starting point; press **T** / **AUTO EN** in the world to begin a continuously looping English presentation through Steps 00–08. Physical arrival starts each Step; departure waits for narration, exhibit playback, and any artifact handoff to finish. The tour plays nine local Sulafat recordings generated with `gemini-3.1-flash-tts-preview`; no API key or speech service is needed during playback. Muted, unavailable, or stalled audio falls back to a word-count-based subtitle reading interval. The deployment Step also waits for its kg-result event. The HUD voice control can mute or replay the current Step narration.

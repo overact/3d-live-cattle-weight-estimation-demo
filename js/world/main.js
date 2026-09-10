@@ -19,6 +19,7 @@ import { initRoam } from "./roam.js?v=20260907-ranch-drive-v6";
 import { createAutoTour } from "./auto-tour.js?v=20260907-ranch-drive-v6";
 import { initAutoTourHud } from "./auto-tour-hud.js?v=20260907-ranch-drive-v6";
 import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260909-sulafat";
+import { createFullscreenControl } from "./fullscreen.js?v=20260910-fullscreen";
 import { createRanchRace } from "./race.js?v=20260907-ranch-drive-v6";
 import { exhibitCompletion } from "./tour-completion.js";
 import { createPipelineCarry } from "./pipeline-carry.js?v=20260907-ranch-drive-v6";
@@ -484,6 +485,13 @@ async function main() {
   }
   document.getElementById("btnRace").addEventListener("click", startRace);
   document.getElementById("btnRaceIntro").addEventListener("click", startRace);
+
+  /* ---- fullscreen toggle ----
+     Owns its own button state and the Escape guard, so nothing below has to
+     know about fullscreen: while it is active the module swallows Escape in
+     the capture phase and the map toggle / roam exit / race exit simply wait
+     for the next press. */
+  const fullscreen = createFullscreenControl(document.getElementById("btnFullscreen"));
 
   /* ---- state machine ---- */
   let worldTime = 0;
@@ -1298,6 +1306,12 @@ async function main() {
           voice: autoTourVoice.qaState
         };
       }
+    },
+    fullscreen: {
+      enter: () => fullscreen.enter(),
+      exit: () => fullscreen.exit(),
+      toggle: () => fullscreen.toggle(),
+      get state() { return fullscreen.state; }
     }
   };
   window.__worldReady = false;

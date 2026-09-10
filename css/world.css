@@ -38,7 +38,7 @@ html, body {
 body:not(.world-entered) :is(
   .labels, .station-chip, .carry-status, .dock, .hint,
   .research-guide, .entry-toast, #stationPanel, .travel-caption,
-  .auto-tour-hud
+  .auto-tour-hud, .fullscreen-btn
 ) {
   visibility: hidden;
   pointer-events: none;
@@ -621,6 +621,56 @@ body.world-painted #worldWrap { opacity: 1; }
 .dock button:hover { color: #fff; border-color: rgba(134, 215, 234, 0.5); }
 .dock button:active { transform: scale(0.94); }
 
+/* ---------- fullscreen toggle ---------- */
+/* Fixed to the top-right corner, clear of the station panel (top: 72px) and of
+   the centered page nav. It stays outside .dock on purpose: the dock is
+   trimmed to AUTO EN during the narrated tour and hidden outright in Gaming
+   mode, where race.css re-anchors this button instead (the race clock,
+   minimap and item bar own the right edge). */
+.fullscreen-btn {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.4rem;
+  height: 2.4rem;
+  padding: 0;
+  cursor: pointer;
+  color: var(--dim);
+  background: rgba(13, 16, 20, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  transition: color 0.18s, border-color 0.18s, background 0.18s, transform 0.12s ease;
+}
+
+/* display:flex above would beat the UA's [hidden] rule — fullscreen.js hides
+   the button with that attribute when the browser has no element API */
+.fullscreen-btn[hidden] { display: none !important; }
+.fullscreen-btn:hover { color: #fff; border-color: rgba(134, 215, 234, 0.5); }
+.fullscreen-btn:active { transform: scale(0.94); }
+.fullscreen-btn:focus-visible { outline: 2px solid var(--ice); outline-offset: 3px; }
+.fullscreen-btn[aria-pressed="true"] { color: var(--ice); border-color: rgba(134, 215, 234, 0.46); }
+
+.fullscreen-btn__icon {
+  width: 1.05rem;
+  height: 1.05rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* swapped by state, not by :fullscreen — the prefixed Safari spelling never
+   matches that pseudo-class, and fullscreenchange already syncs the attribute */
+.fullscreen-btn__icon--exit { display: none; }
+.fullscreen-btn[aria-pressed="true"] .fullscreen-btn__icon--enter { display: none; }
+.fullscreen-btn[aria-pressed="true"] .fullscreen-btn__icon--exit { display: block; }
+
 .dot.active {
   color: var(--night);
   background: var(--amber);
@@ -919,7 +969,7 @@ body.tour #stationPanel { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   #intro, #stationPanel, .station-chip, .entry-toast, .opening-guide__track span { transition: none; }
   .opening-guide__panel:not([hidden]) { animation: none; }
-  .dock button, .chip-btn, .pipe-row, #btnStartTour { transition: none; }
+  .dock button, .chip-btn, .pipe-row, #btnStartTour, .fullscreen-btn { transition: none; }
 }
 
 @media (max-width: 900px) {
@@ -1734,3 +1784,15 @@ body.auto-tour-active #dots { display: flex; flex: 1 1 auto; width: auto; min-wi
 body.auto-tour-active #dots .dot { flex: 1 1 30px; min-width: 26px; min-height: 40px; padding-inline: 3px; }
 body.auto-tour-active #dots .dot-link { display: none; }
 body.auto-tour-active #btnAutoTour { width: auto; }
+
+/* ---------- fullscreen toggle on small screens ---------- */
+/* The centered nav pill stays narrow enough that the corner is still free at
+   320px; the travel caption sits at top: 62px, below this button. */
+@media (max-width: 640px) {
+  .fullscreen-btn {
+    top: max(8px, env(safe-area-inset-top));
+    right: 10px;
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+}

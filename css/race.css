@@ -11,6 +11,11 @@
 .race-hud button:focus-visible, .intro-race-link:focus-visible { outline: 2px solid var(--ice); outline-offset: 4px; }
 body.race-active :is(.dock,.station-chip,.carry-status,.research-guide,.entry-toast,.hint,.labels,
   #stationPanel,.step-scrubber,.travel-caption,.calf-bubble,.global-nav) { display: none !important; }
+/* The fullscreen toggle survives Gaming mode — a presenter wants it most here —
+   but the right edge belongs to the clock, minimap and item bar, so it drops to
+   the free strip between the item bar and the footer buttons. z-index 81 keeps
+   it clickable over the briefing/results overlay. */
+body.race-active .fullscreen-btn { top: auto; bottom: 84px; right: 28px; z-index: 81; }
 .race-topbar { position: absolute; top: 25px; left: 28px; right: 28px; display: flex; justify-content: space-between; align-items: start; }
 .race-brand > span { color: var(--amber); font-size: .6rem; letter-spacing: .16em; }
 .race-brand { text-shadow: 0 2px 12px #000; }
@@ -86,6 +91,8 @@ body.race-active :is(.dock,.station-chip,.carry-status,.research-guide,.entry-to
   .race-footer { left: 10px; right: 10px; bottom: max(10px,env(safe-area-inset-bottom)); font-size: .48rem; }
   .race-footer > span { display: none; }.race-footer > div { width: 100%; justify-content: space-between; }
   .race-footer button { min-height: 40px; padding: .5rem .6rem; }
+  /* phone footer is 10px + 40px tall, and the item bar sits at bottom: 190px */
+  body.race-active .fullscreen-btn { bottom: 74px; right: 16px; }
   .race-status { top: 36%; font-size: .6rem; }
 }
 @media (max-width: 380px) {
