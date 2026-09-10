@@ -210,7 +210,7 @@ renderOpeningGuide(0);
    stays static on purpose: the world genuinely cannot run without them. */
 async function loadFullscreenControl(button) {
   try {
-    const { createFullscreenControl } = await import("./fullscreen.js?v=20260910-fs2");
+    const { createFullscreenControl } = await import("./present-mode.js?v=20260910-present");
     return createFullscreenControl(button);
   } catch (err) {
     /* The button stays hidden, so leave a trail a visitor can read back:

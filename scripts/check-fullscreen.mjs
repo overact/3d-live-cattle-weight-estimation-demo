@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { createFullscreenControl } from "../js/world/fullscreen.js?v=20260910-fullscreen";
+import { createFullscreenControl } from "../js/world/present-mode.js?v=20260910-present";
 
 const root = process.cwd();
 const read = (rel) => fs.readFileSync(path.join(root, rel), "utf8");
@@ -34,12 +34,7 @@ function makeDoc({ standard = true, webkit = false } = {}) {
       if (at >= 0) listeners.splice(at, 1);
     },
     countListeners(type) { return listeners.filter((entry) => entry.type === type).length; },
-    emit(type) {
-      const event = {
-        key: "Escape",
-        stopped: false,
-        stopImmediatePropagation() { this.stopped = true; }
-      };
+    emitKey(type, event) {
       /* capture listeners first regardless of registration order, exactly like
          a real keydown whose target sits below document */
       const ordered = [...listeners].sort((a, b) => Number(b.capture) - Number(a.capture));
@@ -51,6 +46,13 @@ function makeDoc({ standard = true, webkit = false } = {}) {
         if (event.stopped) break;
       }
       return { stopped: event.stopped, bubbleRan };
+    },
+    emit(type) {
+      return doc.emitKey(type, {
+        key: "Escape",
+        stopped: false,
+        stopImmediatePropagation() { this.stopped = true; }
+      });
     }
   };
   if (standard) {
@@ -147,7 +149,7 @@ console.warn = (...args) => warnings.push(args.join(" "));
   const control = createFullscreenControl(button, doc);
   doc.addEventListener("keydown", () => { pageEscapes++; });
 
-  assert.equal(doc.emit("keydown").bubbleRan, 2, "Escape keeps its page meaning outside fullscreen");
+  assert.equal(doc.emit("keydown").stopped, false, "Escape keeps its page meaning outside fullscreen");
   assert.equal(pageEscapes, 2);
 
   button.click();
@@ -164,7 +166,7 @@ console.warn = (...args) => warnings.push(args.join(" "));
 
   const listeners = doc.countListeners("keydown");
   control.dispose();
-  assert.equal(doc.countListeners("keydown"), listeners - 1, "dispose unhooks the guard");
+  assert.equal(doc.countListeners("keydown"), listeners - 2, "dispose unhooks the Escape guard and the V key");
   assert.equal(doc.countListeners("fullscreenchange"), 0, "dispose unhooks the state sync");
 }
 
@@ -205,6 +207,54 @@ console.warn = (...args) => warnings.push(args.join(" "));
   assert.equal(doc.exits, 1, "and leaves it through the prefixed exit");
 }
 
+/* ---------- V: the presenter key ----------
+   Free in every ranch mode, but it must stay quiet before the world is on
+   screen and while the visitor is typing. */
+{
+  const doc = makeDoc();
+  doc.defaultView = { getComputedStyle: () => ({ visibility: "visible" }) };
+  const button = makeButton();
+  const control = createFullscreenControl(button, doc);
+  const key = (over = {}) => Object.assign({
+    key: "v",
+    prevented: false,
+    preventDefault() { this.prevented = true; }
+  }, over);
+
+  doc.emitKey("keydown", key());
+  await flush();
+  assert.equal(doc.requests, 1, "V enters fullscreen");
+  doc.emitKey("keydown", key({ key: "V" }));
+  await flush();
+  assert.equal(doc.exits, 1, "and V leaves it again");
+  assert.equal(control.isActive(), false);
+
+  const modified = key({ ctrlKey: true });
+  doc.emitKey("keydown", modified);
+  await flush();
+  assert.equal(doc.requests, 1, "browser shortcuts keep their modifier combinations");
+  assert.equal(modified.prevented, false, "and are not swallowed");
+
+  doc.emitKey("keydown", key({ target: { closest: (sel) => (sel.includes("input") ? {} : null) } }));
+  await flush();
+  assert.equal(doc.requests, 1, "typing a v in a field is not a fullscreen request");
+
+  doc.emitKey("keydown", key({ repeat: true }));
+  await flush();
+  assert.equal(doc.requests, 1, "a held key does not thrash the browser");
+
+  /* before the world is entered the button is hidden by css, so V is inert */
+  doc.defaultView = { getComputedStyle: () => ({ visibility: "hidden" }) };
+  doc.emitKey("keydown", key());
+  await flush();
+  assert.equal(doc.requests, 1, "V does nothing on the intro poster");
+  button.hidden = true;
+  doc.defaultView = { getComputedStyle: () => ({ visibility: "visible" }) };
+  doc.emitKey("keydown", key());
+  await flush();
+  assert.equal(doc.requests, 1, "and nothing in the ?tour=1 recorder frame");
+}
+
 console.warn = realWarn;
 
 /* ---------- static wiring ---------- */
@@ -212,8 +262,8 @@ console.warn = realWarn;
    landed, the toggle module moved to clear a cached failure, and main.js moved
    with both. */
 const CSS_VERSION = "20260910-fullscreen";
-const VERSION = "20260910-fs2";          // fullscreen.js itself
-const MAIN_VERSION = "20260910-failsoft2";
+const VERSION = "20260910-present";      // present-mode.js itself
+const MAIN_VERSION = "20260910-present";
 const ranchHtml = read("index.html");
 const worldMain = read("js/world/main.js");
 const worldCss = read("css/world.css");
@@ -239,7 +289,7 @@ for (const fragment of [
    mistake this assertion for a real module edge. */
 for (const fragment of [
   "loadFullscreenControl",
-  `"./fullscreen.js?v=${VERSION}"`,
+  `"./present-mode.js?v=${VERSION}"`,
   'loadFullscreenControl(document.getElementById("btnFullscreen"))',
   "fullscreen toggle unavailable",
   'reason: "module-unavailable"'
@@ -249,11 +299,15 @@ for (const fragment of [
 /* The toggle must stay a fail-soft dynamic import: a static edge here means one
    unfetchable file costs the whole world, which is exactly how "CHECKING
    WEBGL…" used to hang forever after a partial deploy. */
-if (/from\s+["']\.\/fullscreen\.js/.test(worldMain)) {
-  throw new Error("fullscreen.js must not be a static import: it would be fatal to the world graph");
+if (/from\s+["']\.\/present-mode\.js/.test(worldMain)) {
+  throw new Error("present-mode.js must not be a static import: it would be fatal to the world graph");
 }
-if (!/import\(["']\.\/fullscreen\.js\?v=/.test(worldMain)) {
-  throw new Error("fullscreen.js must be imported on demand");
+if (!/import\(["']\.\/present-mode\.js\?v=/.test(worldMain)) {
+  throw new Error("present-mode.js must be imported on demand");
+}
+/* content blockers match "fullscreen.js": keep the rename, keep the button */
+if (/fullscreen\.js/.test(worldMain + ranchHtml)) {
+  throw new Error("no world URL may be named fullscreen.js — content blockers reject it");
 }
 if (!worldMain.includes("fullscreen: {\n      enter: () => fullscreen.enter()")) {
   throw new Error("window.__world has no fullscreen QA hook");
