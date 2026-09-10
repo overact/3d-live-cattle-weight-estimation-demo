@@ -19,7 +19,6 @@ import { initRoam } from "./roam.js?v=20260907-ranch-drive-v6";
 import { createAutoTour } from "./auto-tour.js?v=20260907-ranch-drive-v6";
 import { initAutoTourHud } from "./auto-tour-hud.js?v=20260907-ranch-drive-v6";
 import { createAutoTourVoice } from "./auto-tour-voice.js?v=20260909-sulafat";
-import { createFullscreenControl } from "./fullscreen.js?v=20260910-fullscreen";
 import { createRanchRace } from "./race.js?v=20260907-ranch-drive-v6";
 import { exhibitCompletion } from "./tour-completion.js";
 import { createPipelineCarry } from "./pipeline-carry.js?v=20260907-ranch-drive-v6";
@@ -202,6 +201,30 @@ openingGuideEl.addEventListener("keydown", (event) => {
 renderOpeningGuide(0);
 
 /* ---------- main ---------- */
+
+/* The fullscreen toggle is a presenter convenience, so it is the one part of
+   the world graph that is imported on demand and fail-soft. A module the
+   browser cannot fetch — a static host caught mid-deploy, a blocked or
+   interrupted request — must cost the button, never the ranch: the toggle
+   hides itself and the Escape guard is simply absent. Every other import here
+   stays static on purpose: the world genuinely cannot run without them. */
+async function loadFullscreenControl(button) {
+  try {
+    const { createFullscreenControl } = await import("./fullscreen.js?v=20260910-fullscreen");
+    return createFullscreenControl(button);
+  } catch (err) {
+    console.warn("fullscreen toggle unavailable:", err);
+    button.hidden = true;
+    return {
+      get state() { return { supported: false, active: false, hidden: true }; },
+      isActive: () => false,
+      enter: () => Promise.resolve(false),
+      exit: () => Promise.resolve(false),
+      toggle: () => Promise.resolve(false),
+      dispose() {}
+    };
+  }
+}
 
 async function main() {
   if (TOUR) document.body.classList.add("tour", "world-entered");
@@ -490,8 +513,9 @@ async function main() {
      Owns its own button state and the Escape guard, so nothing below has to
      know about fullscreen: while it is active the module swallows Escape in
      the capture phase and the map toggle / roam exit / race exit simply wait
-     for the next press. */
-  const fullscreen = createFullscreenControl(document.getElementById("btnFullscreen"));
+     for the next press. A host that cannot serve the module only loses the
+     button (see loadFullscreenControl). */
+  const fullscreen = await loadFullscreenControl(document.getElementById("btnFullscreen"));
 
   /* ---- state machine ---- */
   let worldTime = 0;

@@ -209,6 +209,9 @@ console.warn = realWarn;
 
 /* ---------- static wiring ---------- */
 const VERSION = "20260910-fullscreen";
+/* main.js itself changed when the graph was made fail-soft, so its own query
+   moved without dragging the unchanged stylesheets along */
+const MAIN_VERSION = "20260910-failsoft";
 const ranchHtml = read("index.html");
 const worldMain = read("js/world/main.js");
 const worldCss = read("css/world.css");
@@ -225,7 +228,7 @@ for (const fragment of [
 for (const fragment of [
   `css/world.css?v=${VERSION}`,
   `css/race.css?v=${VERSION}`,
-  `js/world/main.js?v=${VERSION}`
+  `js/world/main.js?v=${MAIN_VERSION}`
 ]) {
   /* the runtime changed, so the cache-busting query must have moved with it */
   if (!ranchHtml.includes(fragment)) throw new Error(`index.html did not bump ${fragment}`);
@@ -233,11 +236,21 @@ for (const fragment of [
 /* Spelled without "from" so the boundary scanner in check-public.mjs cannot
    mistake this assertion for a real module edge. */
 for (const fragment of [
-  "createFullscreenControl",
+  "loadFullscreenControl",
   `"./fullscreen.js?v=${VERSION}"`,
-  'createFullscreenControl(document.getElementById("btnFullscreen"))'
+  'loadFullscreenControl(document.getElementById("btnFullscreen"))',
+  "fullscreen toggle unavailable"
 ]) {
   if (!worldMain.includes(fragment)) throw new Error(`js/world/main.js is missing ${fragment}`);
+}
+/* The toggle must stay a fail-soft dynamic import: a static edge here means one
+   unfetchable file costs the whole world, which is exactly how "CHECKING
+   WEBGL…" used to hang forever after a partial deploy. */
+if (/from\s+["']\.\/fullscreen\.js/.test(worldMain)) {
+  throw new Error("fullscreen.js must not be a static import: it would be fatal to the world graph");
+}
+if (!/import\(["']\.\/fullscreen\.js\?v=/.test(worldMain)) {
+  throw new Error("fullscreen.js must be imported on demand");
 }
 if (!worldMain.includes("fullscreen: {\n      enter: () => fullscreen.enter()")) {
   throw new Error("window.__world has no fullscreen QA hook");
@@ -256,4 +269,69 @@ if (!worldCss.includes("body.tour .ui,") || !raceCss.includes("body.race-active 
   throw new Error("the fullscreen toggle is not accounted for in tour and race modes");
 }
 
+/* ---------- the poster's failure surface ----------
+   A module the browser cannot fetch never runs main.js, so the page itself has
+   to say so. The guard is inline in index.html; run it here with a stub DOM. */
+const reporterSource = ranchHtml.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+if (!reporterSource) throw new Error("index.html has no inline world-failure reporter");
+if (ranchHtml.indexOf("<script>") > ranchHtml.indexOf('<script type="module"')) {
+  throw new Error("the failure reporter must run before the world module script");
+}
+
+function runReporter() {
+  const listeners = {};
+  const timers = [];
+  const classes = [];
+  const status = { textContent: "CHECKING WEBGL…", classList: { add: (c) => classes.push(c) } };
+  const retry = { textContent: "FOLLOW THE CALF", disabled: true, onclick: null };
+  let replaced = null;
+  const win = {
+    addEventListener: (type, fn) => { listeners[type] = fn; },
+    setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }
+  };
+  const doc = {
+    getElementById: (id) => (id === "introStatus" ? status : id === "btnEnter" ? retry : null)
+  };
+  const location = { href: "https://example.test/index.html?tour=1", replace: (u) => { replaced = u; } };
+  new Function("document", "window", "location", reporterSource)(doc, win, location);
+  return { status, retry, listeners, timers, replaced: () => replaced };
+}
+
+{
+  const first = "CHECKING WEBGL…";
+  let h = runReporter();
+  assert.equal(h.status.textContent, first, "the reporter leaves the poster alone until something fails");
+  assert.equal(typeof h.listeners.error, "function", "it listens for load failures");
+  assert.equal(h.timers[0]?.ms, 15000, "and arms the slow-download hint");
+
+  /* a nested import failure surfaces as an error on the main.js script element */
+  h.listeners.error({ target: { tagName: "SCRIPT", src: "https://x/js/world/main.js?v=20260910-fullscreen" } });
+  assert.match(h.status.textContent, /WORLD RUNTIME FAILED TO LOAD/);
+  assert.match(h.status.textContent, /CTRL\+SHIFT\+R/, "the message names the way out");
+  assert.equal(h.retry.textContent, "RETRY LOAD");
+  assert.equal(h.retry.disabled, false, "the retry button becomes usable");
+  h.retry.onclick();
+  assert.match(h.replaced(), /[?&]retry=\d+/, "retry reloads through a fresh document URL");
+  assert.match(h.replaced(), /tour=1/, "and keeps the visitor's parameters");
+
+  /* runtime errors stay main.js's business */
+  h = runReporter();
+  h.listeners.error({ target: { tagName: "IMG", src: "x.webp" } });
+  assert.equal(h.status.textContent, first, "a failed image does not claim the world is broken");
+  h = runReporter();
+  h.listeners.error({ target: { tagName: "SPAN" } });
+  assert.equal(h.status.textContent, first);
+
+  /* a slow first visit is not a failure */
+  h = runReporter();
+  h.timers[0].fn();
+  assert.match(h.status.textContent, /STILL FETCHING THE WORLD RUNTIME/);
+  assert.match(h.status.textContent, /CTRL\+SHIFT\+R/);
+  h = runReporter();
+  h.status.textContent = "READY 12:00:00 · STATIONS 0–8";
+  h.timers[0].fn();
+  assert.equal(h.status.textContent, "READY 12:00:00 · STATIONS 0–8", "a world that answered is left alone");
+}
+
 console.log("Fullscreen toggle verified: click enters, Escape exits, one press means one action.");
+console.log("World-failure surface verified: a module that cannot load says so on the poster.");

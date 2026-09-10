@@ -228,6 +228,49 @@
 
     <!-- Bump the module URL when the world runtime changes: some static booth
          servers cache ES-module graphs more aggressively than the HTML. -->
-  <script type="module" src="js/world/main.js?v=20260910-fullscreen"></script>
+    <!-- The poster status line doubles as the failure surface. A world module
+         the browser cannot fetch (a static host caught mid-deploy, a blocked
+         or interrupted request) leaves main.js unexecuted, and until this guard
+         the poster simply read "CHECKING WEBGL…" forever with the reason
+         visible only in the console. Inline on purpose: an external reporter
+         would be one more file that can fail to load. -->
+    <script>
+      (function () {
+        var status = document.getElementById("introStatus");
+        if (!status) return;
+        var initial = status.textContent;
+        var reported = false;
+        function report() {
+          if (reported) return;
+          reported = true;
+          status.textContent = "WORLD RUNTIME FAILED TO LOAD · A WORLD MODULE COULD NOT BE FETCHED\n" +
+            "OPEN DEVTOOLS → NETWORK FOR THE FAILED URL, THEN HARD-RELOAD (CTRL+SHIFT+R / CMD+SHIFT+R)";
+          var retry = document.getElementById("btnEnter");
+          if (!retry) return;
+          retry.textContent = "RETRY LOAD";
+          retry.disabled = false;
+          retry.onclick = function () {
+            /* a fresh document URL, so a cached failure cannot answer again */
+            var url = new URL(location.href);
+            url.searchParams.set("retry", Date.now());
+            location.replace(url.toString());
+          };
+        }
+        window.addEventListener("error", function (event) {
+          var el = event.target;
+          /* runtime errors belong to main.js's own fatal path, not here */
+          if (!el || el === window || !el.tagName) return;
+          if (el.tagName !== "SCRIPT" && el.tagName !== "LINK") return;
+          report();
+        }, true);
+        /* a slow first visit and a broken one look identical on the poster */
+        window.setTimeout(function () {
+          if (reported || status.textContent !== initial) return;
+          status.textContent = initial +
+            "\nSTILL FETCHING THE WORLD RUNTIME — IF THIS DOES NOT CHANGE, HARD-RELOAD (CTRL+SHIFT+R)";
+        }, 15000);
+      })();
+    </script>
+  <script type="module" src="js/world/main.js?v=20260910-failsoft"></script>
   </body>
 </html>
